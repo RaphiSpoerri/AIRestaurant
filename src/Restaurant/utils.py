@@ -1,6 +1,6 @@
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum
 from django.utils import timezone
-from .models import User, Order, Complaint, Warning, Blacklist
+from .models import Order, Complaint, Warning, Blacklist
 
 
 def calculate_vip_status(user):

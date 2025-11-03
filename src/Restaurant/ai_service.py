@@ -1,7 +1,6 @@
-import os
-import re
-import requests
+import os, re, requests
 from django.conf import settings
+from django.db.models import Avg
 from .models import KnowledgeBaseEntry, AIResponseRating
 
 

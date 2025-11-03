@@ -1,5 +1,5 @@
 from django import forms
-from .models import User, Menu, Order, Complaint, Compliment, Rating, DeliveryBid
+from .models import User, Menu, Complaint, Compliment, Rating, DeliveryBid
 
 
 class UserRegistrationForm(forms.ModelForm):

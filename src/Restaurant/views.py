@@ -2,18 +2,17 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
-from django.http import JsonResponse, Http404
-from django.views.decorators.http import require_http_methods
-from django.db.models import Q, Sum, Count, Avg
+from django.http import JsonResponse
+from django.db.models import Q, Avg
 from django.db import transaction
 from .models import (
     User, Menu, Order, OrderItem, Complaint, Compliment, Rating, 
-    Warning, Blacklist, DeliveryBid, KnowledgeBaseEntry, AIResponseRating
+    DeliveryBid, KnowledgeBaseEntry
 )
-from .forms import MenuItemForm, ComplaintForm, ComplimentForm, RatingForm, DeliveryBidForm, DepositForm
+from .forms import MenuItemForm, ComplaintForm, ComplimentForm, DeliveryBidForm, DepositForm
 from .utils import (
-    calculate_vip_status, process_complaint_decision, get_user_total_spending,
-    can_user_place_order, is_user_blacklisted
+    calculate_vip_status, process_complaint_decision,
+    can_user_place_order
 )
 import json
 
