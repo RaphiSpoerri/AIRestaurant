@@ -3,7 +3,8 @@
 from django.apps import AppConfig
 
 class AIRestaurantConfig(AppConfig):
-    name = 'src'
+    name = 'AIRestaurant'
+    label = 'ai-r'
 
     def ready(self):
         pass
