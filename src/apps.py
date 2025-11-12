@@ -3,7 +3,7 @@
 from django.apps import AppConfig
 
 class AIRestaurantConfig(AppConfig):
-    name = 'AIRestaurant'
+    name = 'data.users.User'
 
     def ready(self):
         pass
