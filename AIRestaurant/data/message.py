@@ -19,6 +19,11 @@ class Compliment(Model):
     message = ForeignKey(Message, CASCADE)
 
 class Complaint(Model):
+    STATUS = [
+        ('v', 'valid'),
+        ('p', 'pending'),
+        ('i', 'invalid')
+    ]
     to      = ForeignKey(User, CASCADE)
     message = ForeignKey(Message, CASCADE)
-    status  = Choices([(a,a) for a in ['valid', 'invalid', 'pending']])
+    status  = CharField(max_length=1, choices=STATUS)
