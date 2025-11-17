@@ -9,7 +9,7 @@ def add_to_cart(request):
     return render(request, 'cart.html')
 
 def ai_chat(request):
-    if request.method == 'POST':
+    if request.method != 'GET':
         question = request.POST.get("query")
 
         assert False, question
