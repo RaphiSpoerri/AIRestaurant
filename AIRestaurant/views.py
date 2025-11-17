@@ -9,9 +9,10 @@ def add_to_cart(request):
     return render(request, 'cart.html')
 
 def ai_chat(request):
-    assert False, request.method
     if request.method == 'POST':
         question = request.POST.get("query")
+
+        assert False, question
         AI_PATH = "/home/SapphireBrick613/AI"
         result = shell(
             [f'{AI_PATH}/llama-run', f'{AI_PATH}/tinyllama-1.1b-chat-v1.0.Q4_0.gguf'],
