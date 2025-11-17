@@ -26,8 +26,8 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path('index/', views.home, name='index'),
     path('add_to_cart/', views.add_to_cart, name='add_to_cart'),
-    template('ai_chat'),
-    path('ai_chat/?msg=<str:msg>/', views.ai_chat),
+
+    path('ai_chat/', views.ai_chat, name='ai_chat'),
     template('cart'),
     template('order_history'),
     template('deposit'),
