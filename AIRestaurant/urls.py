@@ -28,8 +28,8 @@ urlpatterns = [
     path('index/', views.home, name='index'),
     path('add_to_cart/', views.add_to_cart, name='add_to_cart'),
 
-    path('ai_chat_query/<str:question>/', views.ai_chat, name='ai_chat_query'),
     template('ai_chat'),
+    path('ai_chat_query/<str:question>/', views.ai_chat, name='ai_chat_query'),
     template('cart'),
     template('order_history'),
     template('deposit'),
