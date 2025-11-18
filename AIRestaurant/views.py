@@ -14,7 +14,7 @@ def ai_chat(request, question):
         [f'{AI_PATH}/llama-run', f'{AI_PATH}/tinyllama-1.1b-chat-v1.0.Q4_0.gguf'],
         capture_output=True,
         input=question,
-        encoding=True)
+        encoding='utf-8')
     response = result.stdout if result.returncode == 0 else "<AI failed>"
     return JsonResponse({
         "answer": response,
