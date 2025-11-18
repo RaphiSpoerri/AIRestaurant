@@ -82,7 +82,7 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
     // Get CSRF token
     const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
     
-    fetch('/ai_chat/?query=' + encodeURIComponent(query), {
+    fetch('/ai_chat_query/?query=' + encodeURIComponent(query), {
         method: 'GET',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
