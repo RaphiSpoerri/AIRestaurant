@@ -5,6 +5,7 @@ from django.db.models import *
 from .users import User
 
 class Thread(Model):
+    id            = AutoField(primary_key=True)
     title         = CharField(max_length=100)
     creation_date = DateTimeField()
 
@@ -15,7 +16,8 @@ class Message(Model):
     when    = DateTimeField(null=False)
 
 class Compliment(Model):
-    to      = ForeignKey(User, CASCADE)
+    sender  = ForeignKey(User, CASCADE, related_name="ComplimentSender", null=True)
+    to      = ForeignKey(User, CASCADE, related_name="ComplimentTo", null=True)
     message = ForeignKey(Message, CASCADE)
 
 class Complaint(Model):
@@ -24,6 +26,7 @@ class Complaint(Model):
         ('p', 'pending'),
         ('i', 'invalid')
     ]
-    to      = ForeignKey(User, CASCADE)
+    sender  = ForeignKey(User, CASCADE, related_name="ComplaintSender", null=True)
+    to      = ForeignKey(User, CASCADE, related_name="ComplaintTo", null=True)
     message = ForeignKey(Message, CASCADE)
     status  = CharField(max_length=1, choices=STATUS, default='pending')

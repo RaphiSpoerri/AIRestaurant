@@ -3,9 +3,15 @@
 from django.db.models import *
 
 class User(Model):
+    id          = AutoField(primary_key=True)
     name        = CharField(max_length=40)
     email       = CharField(max_length=40)
     password    = CharField(max_length=40)
+    type        = CharField(max_length=2, choices=[
+        ('CU', 'Customer'),
+        ('DL', 'Deliverer'),
+        ('CH', 'Chef'),
+        ('MN', 'Manager')], default="CU")
 
 class Employee(Model):
     login       = OneToOneField(User, CASCADE)
@@ -23,9 +29,15 @@ class Employee(Model):
 
     def score(self):
         """
-        TODO: should return (COUNT(good)  - COUNT(bad)) where
-        good = (SELECT * FROM Compliment AS c WHERE c.to == self.login)
-        bad  = (SELECT * FROM Complaint AS c WHERE c.to == self.login AND c.status == 'valid')
+        TODO: should return good + good_vip - bad - bad_vip
+        good = (SELECT COUNT(*) FROM Compliment AS c WHERE c.to == self.login)
+        bad  = (SELECT COUNT(*) FROM Complaint AS c WHERE c.to == self.login AND c.status == 'valid')
+        good_vip = (SELECT COUNT(*) FROM Compliment AS c
+            INNER JOIN Customer
+            ON c.sender == Customer.login AND c.vip AND c.to == self.login)
+        bad_vip = (SELECT COUNT(*) FROM Compliment AS c
+            INNER JOIN Customer
+            ON c.sender == Customer.login AND c.vip AND c.to == self.login AND c.status == 'valid)
         """
         raise NotImplementedError()
 
