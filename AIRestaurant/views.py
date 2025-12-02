@@ -8,8 +8,11 @@ from .data.customer import Customer, DishRating
 from .data.chef import Chef
 from .data.deliverer import Deliverer
 from .data.manager import Manager
-from .data.message import Compliment, Complaint
+from .data.message import Compliment, Complaint, Message
 from django.db.models import Avg
+from django.utils import timezone
+from django.shortcuts import redirect
+from django.contrib import messages
 
 def home(request):
     return render(request, 'index.html')
@@ -82,9 +85,36 @@ def profile_view(request, user_id):
             context['avg_dish_rating'] = None
 
     # permission: allow manager (staff/superuser) or owner to view private fields
-    is_manager_viewer = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False)
+    viewer_type = getattr(viewer, 'type', None)
+    is_manager_viewer = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
     is_owner = getattr(viewer, 'id', None) == getattr(target, 'id', None)
     context['can_view_private'] = is_manager_viewer or is_owner
+
+    # reputation visibility flags (according to spec): viewers who can affect reputation
+    # may view reputation data. Manager and owner see everything.
+    can_affect = viewer_type in ('CU', 'DL', 'CH')
+    # initialize
+    context['view_warnings'] = False
+    context['view_valid_complaints'] = False
+    context['view_avg_rating'] = False
+
+    if context['can_view_private']:
+        # owner or manager: full access
+        context['view_warnings'] = True
+        context['view_valid_complaints'] = True
+        context['view_avg_rating'] = True
+    else:
+        if can_affect:
+            # allow access depending on target type
+            if target.type == 'CU':
+                context['view_warnings'] = True
+                context['view_valid_complaints'] = True
+            elif target.type == 'DL':
+                context['view_avg_rating'] = True
+                context['view_valid_complaints'] = True
+            elif target.type == 'CH':
+                context['view_avg_rating'] = True
+                context['view_valid_complaints'] = True
 
     # pick template by target type
     tpl_map = {'CU': 'customer.html', 'CH': 'chef.html', 'DL': 'deliverer.html', 'MN': 'manager.html'}
