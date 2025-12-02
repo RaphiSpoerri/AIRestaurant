@@ -92,8 +92,6 @@ def profile_view(request, user_id):
     is_manager_viewer = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
     is_owner = getattr(viewer, 'id', None) == getattr(target, 'id', None)
 
-    # public_visible: fields shown to everyone (templates can assume this)
-    context['public_visible'] = True
     # relevant_visible: data shown to viewers who can affect reputation, or managers
     context['relevant_visible'] = is_manager_viewer or (viewer_type in ('CU', 'DL', 'CH'))
     # private_visible: private fields shown to owner and managers
