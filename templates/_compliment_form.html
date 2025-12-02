@@ -1,6 +1,6 @@
 {% load static %}
 <!-- Partial: compliment form to embed in profile pages -->
-<form method="POST" action="{% url 'file_compliment' %}" class="mb-2">
+<form method="POST" action="{% url 'submit_compliment' %}" class="mb-2">
     {% csrf_token %}
     <input type="hidden" name="filed_against" value="{{ target.id }}">
     <div class="mb-2">

@@ -1,6 +1,6 @@
 {% load static %}
 <!-- Partial: complaint form to embed in profile pages -->
-<form method="POST" action="{% url 'file_complaint' %}" class="mb-2">
+<form method="POST" action="{% url 'submit_complaint' %}" class="mb-2">
     {% csrf_token %}
     <input type="hidden" name="filed_against" value="{{ target.id }}">
     <div class="mb-2">

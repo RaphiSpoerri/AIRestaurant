@@ -9,8 +9,12 @@
       <div class="card-body">
         <h2>{{ target.name }} {% if target.vip %}<span class="badge bg-warning">VIP</span>{% endif %}</h2>
         <p><strong>User type:</strong> Chef</p>
-        {% if avg_dish_rating %}
-          <p><strong>Average Dish Rating:</strong> {{ avg_dish_rating }}</p>
+        {% if view_avg_rating %}
+          {% if avg_dish_rating %}
+            <p><strong>Average Dish Rating:</strong> {{ avg_dish_rating }}</p>
+          {% else %}
+            <p><strong>Average Dish Rating:</strong> N/A</p>
+          {% endif %}
         {% endif %}
       </div>
     </div>
@@ -33,7 +37,13 @@
       <div class="card-header">Complaints</div>
       <div class="card-body">
         {% for cp in complaints %}
-          {% if can_view_private or cp.status == 'v' or user.is_staff %}
+          {% if can_view_private %}
+            <div class="mb-2">
+              <strong>{{ cp.sender.name }}</strong>:
+              {{ cp.message.message }}
+              <div><small class="text-muted">Status: {{ cp.get_status_display }}</small></div>
+            </div>
+          {% elif cp.status == 'v' and view_valid_complaints %}
             <div class="mb-2">
               <strong>{{ cp.sender.name }}</strong>:
               {{ cp.message.message }}
