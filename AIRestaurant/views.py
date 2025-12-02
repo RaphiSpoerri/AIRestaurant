@@ -87,37 +87,17 @@ def profile_view(request, user_id):
         except Exception:
             context['avg_dish_rating'] = None
 
-    # permission: allow manager (staff/superuser) or owner to view private fields
+    # Compute permission grouping (three categories): public / relevant / private
     viewer_type = getattr(viewer, 'type', None)
     is_manager_viewer = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
     is_owner = getattr(viewer, 'id', None) == getattr(target, 'id', None)
-    context['can_view_private'] = is_manager_viewer or is_owner
 
-    # reputation visibility flags (according to spec): viewers who can affect reputation
-    # may view reputation data. Manager and owner see everything.
-    can_affect = viewer_type in ('CU', 'DL', 'CH')
-    # initialize
-    context['view_warnings'] = False
-    context['view_valid_complaints'] = False
-    context['view_avg_rating'] = False
-
-    if context['can_view_private']:
-        # owner or manager: full access
-        context['view_warnings'] = True
-        context['view_valid_complaints'] = True
-        context['view_avg_rating'] = True
-    else:
-        if can_affect:
-            # allow access depending on target type
-            if target.type == 'CU':
-                context['view_warnings'] = True
-                context['view_valid_complaints'] = True
-            elif target.type == 'DL':
-                context['view_avg_rating'] = True
-                context['view_valid_complaints'] = True
-            elif target.type == 'CH':
-                context['view_avg_rating'] = True
-                context['view_valid_complaints'] = True
+    # public_visible: fields shown to everyone (templates can assume this)
+    context['public_visible'] = True
+    # relevant_visible: data shown to viewers who can affect reputation, or managers
+    context['relevant_visible'] = is_manager_viewer or (viewer_type in ('CU', 'DL', 'CH'))
+    # private_visible: private fields shown to owner and managers
+    context['private_visible'] = is_owner or is_manager_viewer
 
     # pick template by target type
     tpl_map = {'CU': 'customer.html', 'CH': 'chef.html', 'DL': 'deliverer.html', 'MN': 'manager.html'}
