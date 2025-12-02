@@ -1,68 +1,49 @@
-"""
-URL configuration for AIRestaurant project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
-
-from django.contrib import admin
 from django.urls import path
-from django.shortcuts import render
 from . import views
-def template(name):
-    return path(name, lambda request: render(request, name + ".html"), name=name)
 
 urlpatterns = [
-    path('', views.home, name='home'),
-    path("admin/", admin.site.urls),
-    path('index/', views.home, name='index'),
-    path('add_to_cart/', views.add_to_cart, name='add_to_cart'),
-    path('ai_chat_query/', views.ai_chat, name='ai_chat_query'),
-    path('ai_chat/', lambda request: render(request, 'ai_chat.html'), name='ai_chat'),
-
-    template('cart'),
-    template('order_history'),
-    template('deposit'),
-    # keep existing template routes for compatibility, but add POST endpoints below
-    template('file_complaint'),
-    template('file_compliment'),
-    template('chef_dashboard'),
-    template('available_orders'),
-    template('my_deliveries'),
-    template('manager_dashboard'),
-    template('manage_menu'),
-    template('logout'),
-    template('login'),
-    template('register')
+    # Public pages
+    path('', views.index, name='index'),
+    path('menu/', views.menu, name='menu'),
+    path('login/', views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+    path('register/', views.register, name='register'),
+    path('ai_chat/', views.ai_chat, name='ai_chat'),
+    path('rate_ai_response/<int:rating_id>/', views.rate_ai_response, name='rate_ai_response'),
+    
+    # Customer pages
+    path('cart/', views.cart, name='cart'),
+    path('add_to_cart/<int:menu_id>/', views.add_to_cart, name='add_to_cart'),
+    path('remove_from_cart/<int:menu_id>/', views.remove_from_cart, name='remove_from_cart'),
+    path('place_order/', views.place_order, name='place_order'),
+    path('order_history/', views.order_history, name='order_history'),
+    path('deposit/', views.deposit, name='deposit'),
+    path('rate_chef/<int:order_id>/', views.rate_chef, name='rate_chef'),
+    path('file_complaint/', views.file_complaint, name='file_complaint'),
+    path('file_compliment/', views.file_compliment, name='file_compliment'),
+    path('my_complaints/', views.my_complaints, name='my_complaints'),
+    
+    # Delivery pages
+    path('available_orders/', views.available_orders, name='available_orders'),
+    path('delivery_bid/<int:order_id>/', views.delivery_bid, name='delivery_bid'),
+    path('my_deliveries/', views.my_deliveries, name='my_deliveries'),
+    
+    # Chef pages
+    path('chef_dashboard/', views.chef_dashboard, name='chef_dashboard'),
+    
+    # Manager pages
+    path('manager_dashboard/', views.manager_dashboard, name='manager_dashboard'),
+    path('manage_menu/', views.manage_menu, name='manage_menu'),
+    path('review_complaint/<int:complaint_id>/', views.review_complaint, name='review_complaint'),
+    path('assign_order/<int:order_id>/', views.assign_order, name='assign_order'),
+    
+    # Order status update
+    path('update_order_status/<int:order_id>/', views.update_order_status, name='update_order_status'),
+    
+    # Cart operations
+    path('update_cart/', views.update_cart, name='update_cart'),
+    
+    # Dish rating
+    path('rate_dish/<int:dish_id>/', views.rate_dish, name='rate_dish'),
 ]
 
-# profile pages: view any user's profile (combined dashboard + public profile)
-urlpatterns += [
-    path('user/<int:user_id>/', views.profile_view, name='profile'),
-]
-
-# Discussion and thread pages (Module 3)
-urlpatterns += [
-    path('discussions/', views.discussions, name='discussions'),
-    path('create_thread/', views.create_thread, name='create_thread'),
-    path('thread/<int:thread_id>/', views.thread_view, name='thread'),
-    path('random_deliverer/', views.random_deliverer, name='random_deliverer'),
-]
-
-# submission endpoints for embedded forms
-from . import views_submit
-urlpatterns += [
-    path('submit_complaint/', views_submit.submit_complaint, name='submit_complaint'),
-    path('submit_compliment/', views_submit.submit_compliment, name='submit_compliment'),
-    path('submit_message/', views_submit.submit_message, name='submit_message'),
-]
