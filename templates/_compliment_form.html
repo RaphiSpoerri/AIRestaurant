@@ -1,0 +1,21 @@
+{% load static %}
+<!-- Partial: compliment form to embed in profile pages -->
+<form method="POST" action="{% url 'file_compliment' %}" class="mb-2">
+    {% csrf_token %}
+    <input type="hidden" name="filed_against" value="{{ target.id }}">
+    <div class="mb-2">
+        <label class="form-label">Type</label>
+        <select name="type" class="form-select">
+            <option value="service">Service</option>
+            <option value="food">Food</option>
+            <option value="other">Other</option>
+        </select>
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Message</label>
+        <textarea name="description" rows="3" class="form-control" placeholder="Say something nice" required></textarea>
+    </div>
+    <div class="d-grid">
+        <button type="submit" class="btn btn-success btn-sm">Send compliment</button>
+    </div>
+</form>
