@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block title %}Placing Order{% endblock %}
+
+{% block content %}
+<h2>Order Status</h2>
+
+<div id="status-card" class="card p-4">
+    <div id="finding" class="text-center">
+        <h4>Finding a deliverer for your order. (Please be patient.)</h4>
+        <p>Time remaining: <span id="countdown">05:00</span></p>
+    </div>
+
+    <div id="onway" class="d-none text-center">
+        <h4 class="text-success">Your order is on the way!</h4>
+        <div id="deliverer-info" class="card mx-auto mt-3" style="max-width:360px;">
+            <div class="card-body d-flex align-items-center">
+                <img id="deliverer-photo" src="https://via.placeholder.com/64" class="rounded-circle me-3" alt="Photo">
+                <div>
+                    <h5 id="deliverer-name">Deliverer Name</h5>
+                    <div id="deliverer-rating">Rating: N/A</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 5 minute countdown (300 seconds)
+let remaining = 300;
+const cd = document.getElementById('countdown');
+const finding = document.getElementById('finding');
+const onway = document.getElementById('onway');
+
+function fmt(s){
+    const mm = Math.floor(s/60).toString().padStart(2,'0');
+    const ss = (s%60).toString().padStart(2,'0');
+    return mm + ':' + ss;
+}
+
+cd.textContent = fmt(remaining);
+const timer = setInterval(()=>{
+    remaining -= 1;
+    if(remaining <= 0){
+        clearInterval(timer);
+        // reveal onway and fetch deliverer
+        finding.classList.add('d-none');
+        onway.classList.remove('d-none');
+        fetchDeliverer();
+    } else {
+        cd.textContent = fmt(remaining);
+    }
+}, 1000);
+
+function fetchDeliverer(){
+    fetch('{% url "random_deliverer" %}').then(r=>r.json()).then(data=>{
+        if(data && !data.error){
+            document.getElementById('deliverer-name').textContent = data.name || 'Deliverer';
+        }
+    }).catch(()=>{});
+}
+
+</script>
+{% endblock %}

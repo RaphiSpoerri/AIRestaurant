@@ -13,6 +13,9 @@ from django.db.models import Avg
 from django.utils import timezone
 from django.shortcuts import redirect
 from django.contrib import messages
+import random
+from django.views.decorators.http import require_POST
+from .data.message import Thread
 
 def home(request):
     return render(request, 'index.html')
@@ -121,3 +124,71 @@ def profile_view(request, user_id):
     tpl = tpl_map.get(target.type, 'customer.html')
 
     return render(request, tpl, context)
+
+
+def discussions(request):
+    """List recent threads and support searching by title via GET param `q`."""
+    q = request.GET.get('q', '').strip()
+    if q:
+        threads = list(Thread.objects.filter(title__icontains=q).order_by('-creation_date')[:50])
+    else:
+        threads = list(Thread.objects.all().order_by('-creation_date')[:10])
+
+    return render(request, 'discussions.html', {
+        'threads': threads,
+        'query': q,
+    })
+
+
+@require_POST
+def create_thread(request):
+    """Create a new thread with the given `title` POST parameter and redirect to it.
+
+    Also creates an initial Message marking the creator and creation time so the
+    thread has a visible starter.
+    """
+    title = request.POST.get('title', '').strip()
+    if not title:
+        messages.error(request, 'Thread title cannot be empty.')
+        return redirect('discussions')
+
+    t = Thread.objects.create(title=title, creation_date=timezone.now())
+    # create an initial message indicating the thread was created
+    Message.objects.create(thread=t, message='Thread created', who=request.user, when=timezone.now())
+    return redirect('thread', thread_id=t.id)
+
+
+def thread_view(request, thread_id):
+    t = get_object_or_404(Thread, pk=thread_id)
+    messages_qs = Message.objects.filter(thread=t).select_related('who').order_by('when')
+
+    # determine starter (earliest message author)
+    starter = None
+    starter_date = None
+    first_msg = messages_qs.first()
+    if first_msg:
+        starter = first_msg.who
+        starter_date = first_msg.when
+
+    return render(request, 'thread.html', {
+        'thread': t,
+        'starter': starter,
+        'starter_date': starter_date,
+        'messages': messages_qs,
+    })
+
+
+def random_deliverer(request):
+    """Return a JSON object with a random deliverer (name, id).
+
+    This is a lightweight helper used by the `place_order.html` client-side
+    countdown to show a deliverer once one has been assigned.
+    """
+    d = Deliverer.objects.order_by('?').first()
+    if not d:
+        return JsonResponse({'error': 'no_deliverers'}, status=404)
+
+    # d.login should be the User model instance representing the deliverer
+    login = getattr(d, 'login', None)
+    name = getattr(login, 'name', '') if login else ''
+    return JsonResponse({'id': getattr(login, 'id', None), 'name': name})

@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.utils import timezone
 from .data.users import User as DataUser
 from .data.message import Message, Complaint, Compliment
+from .data.message import Thread
 
 
 def submit_complaint(request):
@@ -46,3 +47,23 @@ def submit_compliment(request):
     Compliment.objects.create(sender=sender, to=target, message=msg)
     messages.success(request, 'Compliment submitted.')
     return redirect('profile', user_id=target.id)
+
+
+def submit_message(request):
+    if request.method != 'POST':
+        return redirect('discussions')
+
+    thread_id = request.POST.get('thread_id')
+    text = request.POST.get('message', '').strip()
+    if not thread_id or not text:
+        messages.error(request, 'Missing thread or message text.')
+        return redirect('discussions')
+
+    try:
+        t = Thread.objects.get(pk=int(thread_id))
+    except Exception:
+        messages.error(request, 'Thread not found.')
+        return redirect('discussions')
+
+    Message.objects.create(thread=t, message=text, who=request.user, when=timezone.now())
+    return redirect('thread', thread_id=t.id)

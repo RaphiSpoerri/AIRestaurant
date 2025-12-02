@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}Thread - {{ thread.title }}{% endblock %}
+
+{% block content %}
+<h2>{{ thread.title }}</h2>
+<p class="text-muted">Started by {% if starter %}<a href="{% url 'profile' user_id=starter.id %}">{{ starter.name }}</a>{% else %}Unknown{% endif %} {% if starter_date %}on {{ starter_date }}{% endif %}</p>
+
+<div class="card mb-3">
+    <div class="card-body">
+        {% for m in messages %}
+            <div class="mb-3">
+                <strong><a href="{% url 'profile' user_id=m.who.id %}">{{ m.who.name }}</a></strong>
+                <small class="text-muted"> - {{ m.when }}</small>
+                <div>{{ m.message }}</div>
+            </div>
+            <hr>
+        {% empty %}
+            <div class="text-muted">No messages yet.</div>
+        {% endfor %}
+    </div>
+    <div class="card-footer">
+        <form method="post" action="/submit_message/">{% csrf_token %}
+            <input type="hidden" name="thread_id" value="{{ thread.id }}">
+            <div class="input-group">
+                <input name="message" class="form-control" placeholder="Write a message...">
+                <button class="btn btn-primary">Send</button>
+            </div>
+        </form>
+    </div>
+}
+{% endblock %}

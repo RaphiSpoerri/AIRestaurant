@@ -51,9 +51,18 @@ urlpatterns += [
     path('user/<int:user_id>/', views.profile_view, name='profile'),
 ]
 
+# Discussion and thread pages (Module 3)
+urlpatterns += [
+    path('discussions/', views.discussions, name='discussions'),
+    path('create_thread/', views.create_thread, name='create_thread'),
+    path('thread/<int:thread_id>/', views.thread_view, name='thread'),
+    path('random_deliverer/', views.random_deliverer, name='random_deliverer'),
+]
+
 # submission endpoints for embedded forms
 from . import views_submit
 urlpatterns += [
     path('submit_complaint/', views_submit.submit_complaint, name='submit_complaint'),
     path('submit_compliment/', views_submit.submit_compliment, name='submit_compliment'),
+    path('submit_message/', views_submit.submit_message, name='submit_message'),
 ]
