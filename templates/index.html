@@ -1,79 +1,158 @@
-{% extends "./base.html" %}
+{% extends "restaurant/base.html" %}
+{% load static %}
 
-{% block title %}Menu - AI Restaurant{% endblock %}
+{% block title %}Welcome to AI Restaurant{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hero-section {
+        background: linear-gradient(135deg, #6e8efb, #a777e3);
+        color: white;
+        padding: 150px 0;
+        text-align: center;
+        margin-bottom: 60px;
+    }
+    .feature-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        color: #ff6b6b;
+    }
+    .feature-card {
+        padding: 30px 20px;
+        border-radius: 10px;
+        transition: all 0.3s;
+        height: 100%;
+        border: 1px solid #eee;
+    }
+    .feature-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    .cta-section {
+        background-color: #f8f9fa;
+        padding: 80px 0;
+        margin: 60px 0;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-md-8">
-        <h1>Our Menu</h1>
-    </div>
-    <div class="col-md-4">
-        <form method="GET" action="{% url 'index' %}" class="d-flex">
-            <input class="form-control me-2" type="search" name="search" placeholder="Search menu..." value="{{ search }}">
-            <button class="btn btn-outline-primary" type="submit">Search</button>
-        </form>
+<!-- Hero Section -->
+<div class="hero-section">
+    <div class="container">
+        <h1 class="display-3 fw-bold mb-4">Welcome to AI Restaurant</h1>
+        <p class="lead mb-4">Where technology meets culinary excellence</p>
+        <a href="{% url 'menu' %}" class="btn btn-primary btn-lg px-4 me-2">View Our Menu</a>
+        {% if not user.is_authenticated %}
+        <a href="{% url 'register' %}" class="btn btn-outline-light btn-lg px-4">Sign Up</a>
+        {% endif %}
     </div>
 </div>
 
-<div class="mb-3">
-    {% if categories %}
-    <div class="btn-group" role="group">
-        <a href="{% url 'index' %}" class="btn btn-outline-secondary">All</a>
-        {% for cat in categories %}
-        <a href="{% url 'index' %}?category={{ cat }}" 
-           class="btn btn-outline-secondary {% if category == cat %}active{% endif %}">{{ cat }}</a>
-        {% endfor %}
+<!-- Features Section -->
+<div class="container mb-5">
+    <div class="text-center mb-5">
+        <h2>Why Choose Us</h2>
+        <p class="lead text-muted">Experience the future of dining with our innovative approach</p>
     </div>
-    {% endif %}
+    
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="feature-card text-center">
+                <div class="feature-icon">
+                    <i class="bi bi-robot"></i>
+                </div>
+                <h3>AI-Powered Menu</h3>
+                <p>Our menu is crafted using advanced AI algorithms to ensure perfect flavor combinations and nutritional balance in every dish.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="feature-card text-center">
+                <div class="feature-icon">
+                    <i class="bi bi-egg-fried"></i>
+                </div>
+                <h3>Fresh Ingredients</h3>
+                <p>We source only the freshest, locally-sourced ingredients to create meals that are as nutritious as they are delicious.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="feature-card text-center">
+                <div class="feature-icon">
+                    <i class="bi bi-lightning"></i>
+                </div>
+                <h3>Fast Delivery</h3>
+                <p>Our efficient delivery system ensures your food arrives hot and fresh, exactly when you want it.</p>
+            </div>
+        </div>
+    </div>
 </div>
 
-<div class="row">
-    {% for item in menu_items %}
-    <div class="col-md-4 mb-4">
-        <div class="card h-100">
-            {% if item.image %}
-            <img src="{{ item.image.url }}" 
-                 class="card-img-top" alt="{{ item.name }}" style="height: 200px; object-fit: cover;">
-            {% else %}
-            <div class="card-img-top d-flex align-items-center justify-content-center bg-light" style="height: 200px;">
-                <div class="text-center">
-                    <i class="bi bi-image fs-1 text-muted"></i>
-                    <p class="text-muted small mb-0">No image</p>
+<!-- CTA Section -->
+<div class="cta-section">
+    <div class="container text-center">
+        <h2 class="mb-4">Ready to experience the future of dining?</h2>
+        <p class="lead mb-4">Join our community of food enthusiasts and enjoy exclusive benefits</p>
+        <a href="{% url 'menu' %}" class="btn btn-primary btn-lg px-4 me-2">Order Now</a>
+        {% if not user.is_authenticated %}
+        <a href="{% url 'register' %}" class="btn btn-outline-secondary btn-lg px-4">Create Account</a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Testimonials -->
+<div class="container my-5">
+    <div class="text-center mb-5">
+        <h2>What Our Customers Say</h2>
+        <p class="lead text-muted">Don't just take our word for it</p>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                    </div>
+                    <p class="card-text">"The AI-recommended dishes were absolutely amazing! I never would have tried these combinations on my own."</p>
+                    <p class="text-muted mb-0">- Sarah M.</p>
                 </div>
             </div>
-            {% endif %}
-            <div class="card-body">
-                <h5 class="card-title">{{ item.name }}</h5>
-                <p class="card-text">{{ item.description|default:"Delicious item from our kitchen" }}</p>
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <strong class="text-primary">${{ item.price|floatformat:2 }}</strong>
-                        {% if item.chef %}
-                        <br><small class="text-muted">Chef: {{ item.chef.username }}</small>
-                        {% endif %}
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
                     </div>
-                    {% if user.is_authenticated and user.is_customer %}
-                    <form method="POST" action="{% url 'add_to_cart' item.id %}" class="d-inline">
-                        {% csrf_token %}
-                        <div class="input-group" style="width: 120px;">
-                            <input type="number" name="quantity" value="1" min="1" class="form-control form-control-sm" style="width: 60px;">
-                            <button type="submit" class="btn btn-primary btn-sm">
-                                <i class="bi bi-cart-plus"></i>
-                            </button>
-                        </div>
-                    </form>
-                    {% elif not user.is_authenticated %}
-                    <small class="text-muted">Login to order</small>
-                    {% endif %}
+                    <p class="card-text">"Incredible food and the delivery was faster than expected. The app's order tracking is super convenient!"</p>
+                    <p class="text-muted mb-0">- James L.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-half text-warning"></i>
+                    </div>
+                    <p class="card-text">"As a foodie, I'm always looking for new experiences. The AI-curated tasting menu was a revelation!"</p>
+                    <p class="text-muted mb-0">- Priya K.</p>
                 </div>
             </div>
         </div>
     </div>
-    {% empty %}
-    <div class="col-12">
-        <p class="text-center text-muted">No menu items found.</p>
-    </div>
-    {% endfor %}
 </div>
 {% endblock %}
 
