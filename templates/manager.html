@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Manager Profile - {{ target.name }}{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-8">
+    <div class="card mb-3">
+      <div class="card-body">
+        <h2>{{ target.name }}</h2>
+        <p><strong>User type:</strong> Manager</p>
+        {% if can_view_private %}
+          <p><strong>Admin access:</strong> Yes</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header">Compliments</div>
+      <div class="card-body">
+        {% for c in compliments %}
+          <div class="mb-2">
+            <strong><a href="{% url 'profile' c.sender.id %}">{{ c.sender.name }}</a></strong>:
+            {{ c.message.message }}
+          </div>
+        {% empty %}
+          <div>No compliments yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header">Complaints</div>
+      <div class="card-body">
+        {% for cp in complaints %}
+            <div class="mb-2">
+              <strong>{{ cp.sender.name }}</strong>:
+              {{ cp.message.message }}
+              <div><small class="text-muted">Status: {{ cp.get_status_display }}</small></div>
+            </div>
+        {% empty %}
+          <div>No complaints recorded.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    {% if user.is_authenticated and user.id == target.id %}
+      <div class="card mb-3">
+        <div class="card-header">Your Dashboard</div>
+        <div class="card-body">
+          <a class="btn btn-primary w-100 mb-2" href="{% url 'manager_dashboard' %}">Manager Dashboard</a>
+          <a class="btn btn-secondary w-100" href="{% url 'manage_menu' %}">Manage Menu</a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
