@@ -49,234 +49,52 @@ def menu(request):
         'category': category,
         'categories': categories,
     }
-    
-    # If user is authenticated, check which dishes they can rate
-    if request.user.is_authenticated and request.user.is_customer:
-        # Get all orders where the user has ordered this dish
-        ordered_dish_ids = OrderItem.objects.filter(
-            order__customer=request.user,
-            order__status='completed',
-            menu_item__in=menu_items
-        ).values_list('menu_item_id', flat=True).distinct()
-        
-        # Add can_rate flag to each dish
-        for dish in menu_items:
-            dish.can_rate = dish.id in ordered_dish_ids
-    
-    return render(request, 'restaurant/menu.html', context)
+
+    # load profile model instance if present
+    if target.type == 'CU':
+        context['profile'] = Customer.objects.filter(login=target).first()
+    elif target.type == 'CH':
+        context['profile'] = Chef.objects.filter(login=target).first()
+    elif target.type == 'DL':
+        context['profile'] = Deliverer.objects.filter(login=target).first()
+    elif target.type == 'MN':
+        context['profile'] = Manager.objects.filter(login=target).first()
+
+    # compliments and complaints (show latest first)
+    context['compliments'] = list(Compliment.objects.filter(to=target).select_related('sender', 'message').order_by('-id')[:50])
+    context['complaints'] = list(Complaint.objects.filter(to=target).select_related('sender', 'message').order_by('-id')[:50])
+
+    # compute average dish rating for chefs
+    if target.type == 'CH':
+        try:
+            avg = DishRating.objects.filter(dish__chef__login=target).aggregate(avg=Avg('rating'))['avg']
+            if avg is not None:
+                context['avg_dish_rating'] = round(avg, 2)
+        except Exception:
+            context['avg_dish_rating'] = None
+
+    # Compute permission grouping (three categories): public / relevant / private
+    viewer_type = getattr(viewer, 'type', None)
+    is_manager_viewer = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
+    is_owner = getattr(viewer, 'id', None) == getattr(target, 'id', None)
+
+    # relevant_visible: data shown to viewers who can affect reputation, or managers
+    context['relevant_visible'] = is_manager_viewer or (viewer_type in ('CU', 'DL', 'CH'))
+    # private_visible: private fields shown to owner and managers
+    context['private_visible'] = is_owner or is_manager_viewer
+
+    # pick template by target type
+    tpl_map = {'CU': 'customer.html', 'CH': 'chef.html', 'DL': 'deliverer.html', 'MN': 'manager.html'}
+    tpl = tpl_map.get(target.type, 'customer.html')
+
+    return render(request, tpl, context)
 
 
-def login_view(request):
-    """User login"""
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        password = request.POST.get('password')
-        
-        user = authenticate(request, username=username, password=password)
-        if user and user.is_active:
-            login(request, user)
-            return redirect('index')
-        else:
-            messages.error(request, 'Invalid username or password, or account is inactive.')
-    
-    return render(request, 'restaurant/login.html')
-
-
-def logout_view(request):
-    """User logout"""
-    logout(request)
-    messages.info(request, 'You have been logged out.')
-    return redirect('index')
-
-
-def register(request):
-    """User registration"""
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        email = request.POST.get('email')
-        password = request.POST.get('password')
-        role = request.POST.get('role', 'Customer')
-        
-        if User.objects.filter(username=username).exists():
-            messages.error(request, 'Username already exists.')
-            return redirect('register')
-        
-        if User.objects.filter(email=email).exists():
-            messages.error(request, 'Email already exists.')
-            return redirect('register')
-        
-        user = User.objects.create_user(username=username, email=email, password=password, role=role)
-        messages.success(request, 'Registration successful! Please wait for manager approval.')
-        return redirect('login')
-    
-    return render(request, 'restaurant/register.html')
-
-
-# Role-based access decorators
-def manager_required(view_func):
-    return user_passes_test(lambda u: u.is_manager, login_url='index')(view_func)
-
-
-def customer_required(view_func):
-    return user_passes_test(lambda u: u.is_authenticated and u.is_customer, login_url='login')(view_func)
-
-
-def chef_required(view_func):
-    return user_passes_test(lambda u: u.is_chef, login_url='index')(view_func)
-
-
-def delivery_required(view_func):
-    return user_passes_test(lambda u: u.is_delivery, login_url='index')(view_func)
-
-
-@login_required
-@customer_required
-def cart(request):
-    """View shopping cart"""
-    cart_data = request.session.get('cart', {})
-    # Calculate subtotals for display
-    cart_with_subtotals = {}
-    for menu_id, item in cart_data.items():
-        item_copy = item.copy()
-        item_copy['subtotal'] = item['price'] * item['quantity']
-        cart_with_subtotals[menu_id] = item_copy
-    
-    total = sum(item['price'] * item['quantity'] for item in cart_data.values())
-    
-    context = {
-        'cart': cart_with_subtotals,
-        'total': total,
-    }
-    return render(request, 'restaurant/cart.html', context)
-
-
-@login_required
-@customer_required
-def add_to_cart(request, menu_id):
-    """Add item to shopping cart"""
-    menu_item = get_object_or_404(Menu, id=menu_id, is_available=True)
-    
-    cart = request.session.get('cart', {})
-    quantity = int(request.POST.get('quantity', 1))
-    
-    if str(menu_id) in cart:
-        cart[str(menu_id)]['quantity'] += quantity
-    else:
-        cart[str(menu_id)] = {
-            'name': menu_item.name,
-            'price': float(menu_item.price),
-            'quantity': quantity,
-        }
-    
-    request.session['cart'] = cart
-    messages.success(request, f'{menu_item.name} added to cart.')
-    return redirect('index')
-
-
-@login_required
-@customer_required
-def remove_from_cart(request, menu_id):
-    """Remove item from cart"""
-    cart = request.session.get('cart', {})
-    cart.pop(str(menu_id), None)
-    request.session['cart'] = cart
-    messages.info(request, 'Item removed from cart.')
-    return redirect('cart')
-
-
-@login_required
-@customer_required
-def place_order(request):
-    """Place an order"""
-    can_order, error_msg = can_user_place_order(request.user)
-    if not can_order:
-        messages.error(request, error_msg)
-        return redirect('cart')
-    
-    cart = request.session.get('cart', {})
-    if not cart:
-        messages.warning(request, 'Your cart is empty.')
-        return redirect('cart')
-    
-    # Calculate total
-    total = sum(item['price'] * item['quantity'] for item in cart.values())
-    
-    # Check balance
-    if request.user.balance < total:
-        messages.error(request, 'Insufficient balance. Please deposit money first.')
-        return redirect('cart')
-    
-    # Create order
-    with transaction.atomic():
-        order = Order.objects.create(
-            customer=request.user,
-            total_amount=total,
-            delivery_address=request.POST.get('delivery_address', ''),
-            notes=request.POST.get('notes', ''),
-            status='Pending'
-        )
-        
-        # Create order items
-        for menu_id, item_data in cart.items():
-            menu_item = get_object_or_404(Menu, id=int(menu_id))
-            OrderItem.objects.create(
-                order=order,
-                menu_item=menu_item,
-                quantity=item_data['quantity'],
-                subtotal=item_data['price'] * item_data['quantity']
-            )
-        
-        # Deduct balance
-        request.user.balance -= total
-        request.user.save()
-        
-        # Clear cart
-        request.session['cart'] = {}
-        
-        # Check VIP status
-        calculate_vip_status(request.user)
-        
-        messages.success(request, f'Order #{order.id} placed successfully!')
-        return redirect('order_history')
-
-
-@login_required
-@customer_required
-def order_history(request):
-    """View order history"""
-    orders = Order.objects.filter(customer=request.user).order_by('-timestamp')
-    return render(request, 'restaurant/order_history.html', {'orders': orders})
-
-
-@login_required
-@customer_required
-def deposit(request):
-    """Deposit money to account"""
-    if request.method == 'POST':
-        form = DepositForm(request.POST)
-        if form.is_valid():
-            amount = form.cleaned_data['amount']
-            request.user.balance += amount
-            request.user.save()
-            messages.success(request, f'${amount:.2f} deposited successfully. New balance: ${request.user.balance:.2f}')
-            return redirect('deposit')
-    else:
-        form = DepositForm()
-    
-    return render(request, 'restaurant/deposit.html', {'form': form})
-
-
-@login_required
-def file_complaint(request):
-    """File a complaint"""
-    if request.method == 'POST':
-        form = ComplaintForm(request.POST)
-        if form.is_valid():
-            complaint = form.save(commit=False)
-            complaint.filed_by = request.user
-            complaint.save()
-            messages.success(request, 'Complaint filed successfully. Manager will review it.')
-            return redirect('my_complaints')
+def discussions(request):
+    """List recent threads and support searching by title via GET param `q`."""
+    q = request.GET.get('q', '').strip()
+    if q:
+        threads = list(Thread.objects.filter(title__icontains=q).order_by('-creation_date')[:50])
     else:
         form = ComplaintForm()
         # Filter orders for dropdown

@@ -9,10 +9,10 @@
       <div class="card-body">
         <h2>{{ target.name }} {% if target.vip %}<span class="badge bg-warning">VIP</span>{% endif %}</h2>
         <p><strong>User type:</strong> Customer</p>
-        {% if can_view_private %}
+        {% if private_visible %}
           <p><strong>Balance:</strong> ${{ profile.balance }}</p>
         {% endif %}
-        {% if view_warnings %}
+        {% if relevant_visible %}
           <p><strong>Warnings:</strong> {{ profile.warnings }}</p>
         {% endif %}
       </div>
@@ -36,13 +36,13 @@
       <div class="card-header">Complaints</div>
       <div class="card-body">
         {% for cp in complaints %}
-          {% if can_view_private %}
+          {% if private_visible %}
             <div class="mb-2">
               <strong>{{ cp.sender.name }}</strong>:
               {{ cp.message.message }}
               <div><small class="text-muted">Status: {{ cp.get_status_display }}</small></div>
             </div>
-          {% elif cp.status == 'v' and view_valid_complaints %}
+          {% elif cp.status == 'v' and relevant_visible %}
             <div class="mb-2">
               <strong>{{ cp.sender.name }}</strong>:
               {{ cp.message.message }}

@@ -9,7 +9,7 @@
       <div class="card-body">
         <h2>{{ target.name }}</h2>
         <p><strong>User type:</strong> Manager</p>
-        {% if can_view_private %}
+        {% if private_visible %}
           <p><strong>Admin access:</strong> Yes</p>
         {% endif %}
       </div>
