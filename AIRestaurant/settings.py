@@ -25,7 +25,6 @@ SECRET_KEY = "django-insecure-@b5p0%yt-f65$eezd!&=16hizgro$xhu5j^k9yg(z4awctgett
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['SapphireBrick613.pythonanywhere.com']
 
 
 # Application definition
@@ -130,4 +129,4 @@ MEDIA_URL = '/media/'
 STATIC_ROOT = '/home/SapphireBrick613/AIRestaurant/AIRestaurant/static'
 STATIC_URL = '/static/'
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'SapphireBrick613.pythonanywhere.com']
