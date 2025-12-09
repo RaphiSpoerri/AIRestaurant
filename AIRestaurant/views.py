@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from subprocess import run as shell
 from urllib.parse import unquote
 from django.shortcuts import get_object_or_404
-from .models import User as DataUser, Customer, DishRating, Deliverer, Chef, Manager, Compliment, Complaint, Message
+from .models import User as DataUser, Customer, DishRating, Dish, Deliverer, Chef, Manager, Compliment, Complaint, Message
 from django.db.models import Avg
 from django.utils import timezone
 from django.shortcuts import redirect
@@ -14,7 +14,7 @@ from .data.message import Thread
 def home(request):
     return render(request, 'index.html')
 def menu(request):
-    return render(request, 'menu.html')
+    return render(request, 'menu.html', {'dishes': Dish.objects.all().values()})
 def add_to_cart(request):
     return render(request, 'cart.html')
 
@@ -26,7 +26,7 @@ def update_cart(request):
 def cart(request):
     return render(request, 'cart.html')
 def __getattr__(name):
-    return lambda request: render(request, f'{name}.html')
+    return lambda request, *args: render(request, f'{name}.html', *args)
 
 def ai_chat(request):
     AI_PATH = "/home/SapphireBrick613/AI"
