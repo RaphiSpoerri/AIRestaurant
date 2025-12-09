@@ -4,10 +4,10 @@ from . import views
 urlpatterns = [
     # Public pages
     path('', views.home, name='index'),
-    #path('menu/', views.menu, name='menu'),
-    #path('login/', views.login_view, name='login'),
+    path('menu/', views.menu, name='menu'),
+    path('login/', views.login, name='login'),
     #path('logout/', views.logout_view, name='logout'),
-    #path('register/', views.register, name='register'),
+    path('register/', views.register, name='register'),
     path('ai_chat/', views.ai_chat, name='ai_chat'),
     #path('rate_ai_response/<int:rating_id>/', views.rate_ai_response, name='rate_ai_response'),
     

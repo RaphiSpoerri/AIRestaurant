@@ -13,9 +13,13 @@ from .data.message import Thread
 
 def home(request):
     return render(request, 'index.html')
-
+def menu(request):
+    return render(request, 'menu.html')
 def add_to_cart(request):
     return render(request, 'cart.html')
+
+def __getattr__(name):
+    return lambda request: render(request, f'{name}.html')
 
 def ai_chat(request):
     AI_PATH = "/home/SapphireBrick613/AI"
