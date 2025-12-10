@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, re_path
 from . import views
 
 urlpatterns = [
@@ -6,7 +6,7 @@ urlpatterns = [
     path('', views.home, name='index'),
     path('menu/', views.menu, name='menu'),
     path('login/', views.login, name='login'),
-    #path('logout/', views.logout_view, name='logout'),
+    path('logout/', views.logout, name='logout'),
     path('register/', views.register, name='register'),
     path('ai_chat/', views.ai_chat, name='ai_chat'),
     #path('rate_ai_response/<int:rating_id>/', views.rate_ai_response, name='rate_ai_response'),
@@ -16,8 +16,8 @@ urlpatterns = [
     path('add_to_cart/<int:menu_id>/', views.add_to_cart, name='add_to_cart'),
     #path('remove_from_cart/<int:menu_id>/', views.remove_from_cart, name='remove_from_cart'),
     #path('place_order/', views.place_order, name='place_order'),
-    #path('order_history/', views.order_history, name='order_history'),
-    #path('deposit/', views.deposit, name='deposit'),
+    path('order_history/', views.order_history, name='order_history'),
+    path('deposit/', views.deposit, name='deposit'),
     #path('rate_chef/<int:order_id>/', views.rate_chef, name='rate_chef'),
     #path('file_complaint/', views.file_complaint, name='file_complaint'),
     #path('file_compliment/', views.file_compliment, name='file_compliment'),
@@ -39,7 +39,12 @@ urlpatterns = [
     
     # Order status update
     #path('update_order_status/<int:order_id>/', views.update_order_status, name='update_order_status'),
-    
+    # Allow both query-string and path forms for customer profiles:
+    path('customer/', views.customer, name='customer'),
+    path('customer/<str:profile>/', views.customer, name='customer_profile'),
+    path('chef/', views.chef, name='chef'),
+    path('deliverer/', views.deliverer, name='deliverer'),
+    path('manager/', views.manager, name='manager'),
     path('cart/', views.cart, name='cart'),
     path('update_cart/', views.update_cart, name='update_cart'),
     

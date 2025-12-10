@@ -8,11 +8,13 @@ from django.db.models import Avg
 from django.utils import timezone
 from django.shortcuts import redirect
 from django.contrib import messages
+from django.db import IntegrityError
 from django.views.decorators.http import require_POST
 from .data.message import Thread
-
+from django.contrib.auth import authenticate, login, logout as auth_logout
+from django.urls import reverse
 def home(request):
-    return render(request, 'index.html')
+    return render(request, 'index.html', {'user': request.user})
 def menu(request):
     return render(request, 'menu.html', {'dishes': Dish.objects.all().values()})
 def add_to_cart(request):
@@ -20,7 +22,84 @@ def add_to_cart(request):
 
 def rate_dish(request, dish_id):
     return render(request, 'rate_dish.html', {'dish_id': dish_id})
+def login(request):
+    if request.method == 'POST':
+        name = request.POST.get('username')
+        password = request.POST.get('password')
+        user = authenticate(request, username=name, password=password)
+        if user is not None:
+            # log the user in (create Django auth session)
+            from django.contrib.auth import login as auth_login
+            auth_login(request, user)
 
+            # Redirect to appropriate dashboard based on user type
+            user_type = getattr(user, 'type', None)
+            if user_type == 'CU':
+                # Redirect to the customer page using query string (works with PA and local)
+                return redirect(f"{reverse('customer')}?profile={user.username}")
+            elif user_type == 'CH':
+                return redirect('chef')
+            elif user_type == 'DL':
+                return redirect('deliverer')
+            elif user_type == 'MN':
+                return redirect('manager')
+        else:
+            messages.error(request, 'Invalid email or password.')
+    return render(request, 'login.html')
+
+
+def logout(request):
+    """Log the user out and clear session-based user id, then show logout page."""
+    # log out Django auth session (if any)
+    try:
+        auth_logout(request)
+    except Exception:
+        # ignore if logout fails for any reason
+        pass
+
+    # remove custom session key used in this project
+    request.session.pop('user_id', None)
+    request.session.modified = True
+
+    messages.info(request, 'You have been logged out.')
+    return render(request, 'logout.html')
+def register(request):
+    if request.method == 'POST':
+        USERTYPE = {'Customer': 'CU', 'Chef': 'CH', 'Deliverer': 'DL', 'Manager': 'MN'}
+        t = USERTYPE[request.POST['role']]
+        if DataUser.objects.filter(email=request.POST['email']).count() == 0:
+            messages.error(request, "User with this email already exists")
+            return render(request, 'register.html')
+
+        new_user = DataUser.objects.create_user(
+            username=request.POST['username'],
+            email=request.POST['email'],
+            password=request.POST['password'],
+            type=t,
+            id=DataUser.objects.count() + 1
+        )
+        new_user.save()
+        
+        request.session['user_id'] = new_user.id
+        request.session.modified = True
+
+        match t:
+            case 'CU':
+                Customer.objects.create(login=new_user)
+                return redirect('customer')
+            case 'CH':
+                Chef.objects.create(login=new_user)
+                return redirect('chef')
+            case 'DL':
+                Deliverer.objects.create(login=new_user)
+                return redirect('deliverer')
+            case 'MN':
+                Manager.objects.create(login=new_user)
+                return redirect('manager')
+            case _:
+                assert False, "Invalid user type"
+            
+    return render(request, 'register.html')
 def update_cart(request):
     return render(request, 'cart.html')
 def cart(request):
@@ -28,8 +107,40 @@ def cart(request):
 def __getattr__(name):
     return lambda request, *args: render(request, f'{name}.html', *args)
 
+
+def customer(request, profile: str = None):
+    """Render a customer profile.
+
+    Accepts either a querystring `?profile=<username>` or a path parameter
+    `/customer/<profile>/`. Delegates to `profile_view` (which expects an
+    integer `user_id`) by resolving the username to a user id.
+    """
+    # profile might come from path param or querystring
+    profile = profile or request.GET.get('profile')
+    if not profile:
+        # If no profile provided, show a generic customer page or 404
+        return render(request, 'customer.html')
+
+    # try to resolve by username first, then by email
+    user = DataUser.objects.filter(username=profile).first()
+    if not user:
+        user = DataUser.objects.filter(email=profile).first()
+    if not user:
+        # try numeric id
+        try:
+            user = DataUser.objects.get(id=int(profile))
+        except Exception:
+            user = None
+
+    if not user:
+        return get_object_or_404(DataUser, username=profile)  # will raise 404
+
+    return profile_view(request, user.id)
+
 def ai_chat(request):
     AI_PATH = "/home/SapphireBrick613/AI"
+    if request.method != 'POST':
+        return render(request, 'ai_chat')
     question = unquote(request.POST.get('query'))
     result = shell(
         [f'{AI_PATH}/llama-run', f'{AI_PATH}/tinyllama-1.1b-chat-v1.0.Q4_0.gguf'],
@@ -163,17 +274,60 @@ def thread_view(request, thread_id):
     })
 
 
-def random_deliverer(request):
-    """Return a JSON object with a random deliverer (name, id).
+def register(request):
+    """Handle user registration with validation and graceful DB error handling."""
+    USERTYPE = {'Customer': 'CU', 'Chef': 'CH', 'Deliverer': 'DL', 'Manager': 'MN'}
 
-    This is a lightweight helper used by the `place_order.html` client-side
-    countdown to show a deliverer once one has been assigned.
-    """
-    d = Deliverer.objects.order_by('?').first()
-    if not d:
-        return JsonResponse({'error': 'no_deliverers'}, status=404)
+    if request.method == 'POST':
+        role = request.POST.get('role', '')
+        t = USERTYPE.get(role)
+        username = request.POST.get('username', '').strip()
+        email = request.POST.get('email', '').strip()
+        password = request.POST.get('password', '')
 
-    # d.login should be the User model instance representing the deliverer
-    login = getattr(d, 'login', None)
-    name = getattr(login, 'name', '') if login else ''
-    return JsonResponse({'id': getattr(login, 'id', None), 'name': name})
+        # Basic validation
+        if not username or not email or not password or not t:
+            messages.error(request, 'Please fill in all required fields.')
+            return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
+
+        # Check duplicates and give friendly errors instead of raising DB constraint errors
+        if DataUser.objects.filter(username=username).exists():
+            messages.error(request, 'That username is already taken.')
+            return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
+        if DataUser.objects.filter(email=email).exists():
+            messages.error(request, 'An account with that email already exists.')
+            return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
+
+        # Create user inside try/except to catch any integrity problems
+        try:
+            new_user = DataUser.objects.create_user(username=username, email=email, password=password)
+            # store custom type on the model and save
+            new_user.type = t
+            new_user.save()
+        except IntegrityError:
+            messages.error(request, 'Unable to create account due to a database error. Please try again.')
+            return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
+
+        # Log the user in by storing their ID in the session (your codebase uses session-based auth)
+        request.session['user_id'] = new_user.id
+        request.session.modified = True
+
+        # Create profile records for specific user types and redirect to the appropriate dashboard
+        match t:
+            case 'CU':
+                Customer.objects.create(login=new_user)
+                return redirect('customer')
+            case 'CH':
+                Chef.objects.create(login=new_user)
+                return redirect('chef')
+            case 'DL':
+                Deliverer.objects.create(login=new_user)
+                return redirect('deliverer')
+            case 'MN':
+                Manager.objects.create(login=new_user)
+                return redirect('manager')
+            case _:
+                messages.error(request, 'Invalid user type selected.')
+                return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
+
+    return render(request, 'register.html')

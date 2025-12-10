@@ -7,9 +7,9 @@ from .chef import Dish
 
 class Customer(Model):
     login       = ForeignKey(User, on_delete=CASCADE)
-    warnings    = PositiveIntegerField()
-    balance     = PositiveIntegerField()
-    vip         = BooleanField()
+    warnings    = PositiveIntegerField(default=0)
+    balance     = PositiveIntegerField(default=0)  # in cents
+    vip         = BooleanField(default=False)
 
     def complain_about(self, person: Union['Customer', Employee], message: str):
         # TODO: create a Complaint object and save it

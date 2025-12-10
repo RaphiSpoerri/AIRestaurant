@@ -1,11 +1,12 @@
 
 
 from django.db.models import *
+from django.contrib.auth.models import AbstractUser
 
-class User(Model):
+class User(AbstractUser):
     id          = AutoField(primary_key=True)
-    name        = CharField(max_length=40)
-    email       = CharField(max_length=40)
+    username    = CharField(max_length=40, unique=True, default="")
+    email       = CharField(max_length=40, unique=True)
     password    = CharField(max_length=40)
     type        = CharField(max_length=2, choices=[
         ('CU', 'Customer'),

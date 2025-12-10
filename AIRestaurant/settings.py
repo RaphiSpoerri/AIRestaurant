@@ -130,3 +130,5 @@ STATIC_ROOT = '/home/SapphireBrick613/AIRestaurant/AIRestaurant/static'
 STATIC_URL = '/static/'
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'SapphireBrick613.pythonanywhere.com']
+
+AUTH_USER_MODEL = 'air.User' 
