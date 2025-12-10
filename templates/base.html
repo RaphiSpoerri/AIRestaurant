@@ -28,7 +28,7 @@
                         <a class="nav-link" href="{% url 'ai_chat' %}">AI Chat</a>
                     </li>
                     {% if user.is_authenticated %}
-                        {% if user.is_customer %}
+                        {% if user.type == 'CU' %}
                             <li class="nav-item">
                                 <a class="nav-link" href="{% url 'cart' %}"><i class="bi bi-cart"></i> Cart</a>
                             </li>
@@ -44,13 +44,16 @@
                             <li class="nav-item">
                                 <a class="nav-link" href="{% url 'file_compliment' %}">Compliment</a>
                             </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{% url 'discussions' %}">Discussions</a>
+                            </li>
                         {% endif %}
-                        {% if user.is_chef %}
+                        {% if user.type == 'CH' %}
                             <li class="nav-item">
                                 <a class="nav-link" href="{% url 'chef_dashboard' %}">Chef Dashboard</a>
                             </li>
                         {% endif %}
-                        {% if user.is_delivery %}
+                        {% if user.type == 'DL' %}
                             <li class="nav-item">
                                 <a class="nav-link" href="{% url 'available_orders' %}">Available Orders</a>
                             </li>
@@ -58,7 +61,7 @@
                                 <a class="nav-link" href="{% url 'my_deliveries' %}">My Deliveries</a>
                             </li>
                         {% endif %}
-                        {% if user.is_manager %}
+                        {% if user.type == 'MN' %}
                             <li class="nav-item">
                                 <a class="nav-link" href="{% url 'manager_dashboard' %}">Manager Dashboard</a>
                             </li>

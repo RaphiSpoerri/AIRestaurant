@@ -22,6 +22,105 @@ def add_to_cart(request):
 
 def rate_dish(request, dish_id):
     return render(request, 'rate_dish.html', {'dish_id': dish_id})
+
+
+def rate_ai_response(request, rating_id):
+    """Stub: record a rating for an AI response and return JSON."""
+    if request.method == 'POST':
+        # placeholder: in real app, save rating to DB
+        return JsonResponse({'status': 'ok', 'rating_id': rating_id})
+    return JsonResponse({'error': 'POST required'}, status=400)
+
+
+def remove_from_cart(request, menu_id):
+    # placeholder: remove item from session/cart then redirect
+    return redirect('cart')
+
+
+def place_order(request):
+    # placeholder: show place order page or handle POST to create order
+    if request.method == 'POST':
+        # process order creation here
+        return redirect('order_history')
+    return render(request, 'place_order.html')
+
+
+def rate_chef(request, order_id):
+    if request.method == 'POST':
+        # handle rating submission
+        return redirect('order_history')
+    return render(request, 'rate_chef.html', {'order_id': order_id})
+
+
+def file_complaint(request):
+    if request.method == 'POST':
+        # handle complaint submission
+        return redirect('my_complaints')
+    return render(request, 'file_complaint.html')
+
+
+def file_compliment(request):
+    if request.method == 'POST':
+        # handle compliment submission
+        return redirect('profile')
+    return render(request, 'file_compliment.html')
+
+
+def my_complaints(request):
+    return render(request, 'my_complaints.html')
+
+
+def available_orders(request):
+    return render(request, 'available_orders.html')
+
+
+def delivery_bid(request, order_id):
+    if request.method == 'POST':
+        # handle bid
+        return redirect('available_orders')
+    return render(request, 'delivery_bid.html', {'order_id': order_id})
+
+
+def my_deliveries(request):
+    return render(request, 'my_deliveries.html')
+
+
+def chef_dashboard(request):
+    return render(request, 'chef.html')
+
+
+def manager_dashboard(request):
+    return render(request, 'manager.html')
+
+def discussions(request):
+    return render(request, 'discussions.html')
+
+def manage_menu(request):
+    if request.method == 'POST':
+        # handle menu changes
+        return redirect('manage_menu')
+    return render(request, 'manage_menu.html')
+
+
+def review_complaint(request, complaint_id):
+    if request.method == 'POST':
+        # handle review action
+        return redirect('my_complaints')
+    return render(request, 'review_complaint.html', {'complaint_id': complaint_id})
+
+
+def assign_order(request, order_id):
+    if request.method == 'POST':
+        # assign order logic
+        return redirect('order_history')
+    return render(request, 'assign_order.html', {'order_id': order_id})
+
+
+def update_order_status(request, order_id):
+    if request.method == 'POST':
+        # update status logic
+        return redirect('order_history')
+    return redirect('order_history')
 def login(request):
     if request.method == 'POST':
         name = request.POST.get('username')
@@ -31,6 +130,24 @@ def login(request):
             # log the user in (create Django auth session)
             from django.contrib.auth import login as auth_login
             auth_login(request, user)
+
+            # ensure our session key is set for legacy session usage
+            request.session['user_id'] = user.id
+            request.session.modified = True
+
+            # ensure profile objects exist for this user type (create if missing)
+            try:
+                if getattr(user, 'type', None) == 'CU' and not Customer.objects.filter(login=user).exists():
+                    Customer.objects.create(login=user)
+                if getattr(user, 'type', None) == 'CH' and not Chef.objects.filter(login=user).exists():
+                    Chef.objects.create(login=user)
+                if getattr(user, 'type', None) == 'DL' and not Deliverer.objects.filter(login=user).exists():
+                    Deliverer.objects.create(login=user)
+                if getattr(user, 'type', None) == 'MN' and not Manager.objects.filter(login=user).exists():
+                    Manager.objects.create(login=user)
+            except Exception:
+                # fail safe: don't block login on profile creation errors
+                pass
 
             # Redirect to appropriate dashboard based on user type
             user_type = getattr(user, 'type', None)
@@ -64,41 +181,77 @@ def logout(request):
     messages.info(request, 'You have been logged out.')
     return render(request, 'logout.html')
 def register(request):
-    if request.method == 'POST':
-        USERTYPE = {'Customer': 'CU', 'Chef': 'CH', 'Deliverer': 'DL', 'Manager': 'MN'}
-        t = USERTYPE[request.POST['role']]
-        if DataUser.objects.filter(email=request.POST['email']).count() == 0:
-            messages.error(request, "User with this email already exists")
-            return render(request, 'register.html')
+    """Register a new user with validation and friendly errors.
 
-        new_user = DataUser.objects.create_user(
-            username=request.POST['username'],
-            email=request.POST['email'],
-            password=request.POST['password'],
-            type=t,
-            id=DataUser.objects.count() + 1
-        )
-        new_user.save()
-        
-        request.session['user_id'] = new_user.id
+    This uses Django's create_user to ensure passwords are hashed, sets the
+    custom `type` field, logs the user in via Django's auth system, and
+    creates the associated profile row for the chosen role (Customer/Chef/Deliverer/Manager).
+    """
+    USERTYPE = {'Customer': 'CU', 'Chef': 'CH', 'Deliverer': 'DL', 'Manager': 'MN'}
+
+    if request.method == 'POST':
+        role = request.POST.get('role', '')
+        t = USERTYPE.get(role)
+        username = request.POST.get('username', '').strip()
+        email = request.POST.get('email', '').strip()
+        password = request.POST.get('password', '')
+
+        # Basic validation
+        if not username or not email or not password or not t:
+            messages.error(request, 'Please fill in all required fields.')
+            return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
+
+        if DataUser.objects.filter(username=username).exists():
+            messages.error(request, 'That username is already taken.')
+            return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
+
+        if DataUser.objects.filter(email=email).exists():
+            messages.error(request, 'An account with that email already exists.')
+            return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
+
+        # Create the user and handle potential DB errors
+        try:
+            new_user = DataUser.objects.create_user(username=username, email=email, password=password)
+            new_user.type = t
+            new_user.save()
+        except IntegrityError:
+            messages.error(request, 'Unable to create account due to a database error. Please try again.')
+            return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
+
+        # Log the user in via Django auth and set legacy session key.
+        # Authenticate newly-created user so the auth backend is set, then login.
+        try:
+            auth_user = authenticate(request, username=username, password=password)
+            if auth_user is not None:
+                from django.contrib.auth import login as auth_login
+                auth_login(request, auth_user)
+                request.session['user_id'] = auth_user.id
+            else:
+                # fallback: set session id manually
+                request.session['user_id'] = new_user.id
+        except Exception:
+            request.session['user_id'] = new_user.id
+
         request.session.modified = True
 
-        match t:
-            case 'CU':
+        # Create profile record for the chosen type if missing and redirect
+        try:
+            if t == 'CU':
                 Customer.objects.create(login=new_user)
                 return redirect('customer')
-            case 'CH':
+            if t == 'CH':
                 Chef.objects.create(login=new_user)
                 return redirect('chef')
-            case 'DL':
+            if t == 'DL':
                 Deliverer.objects.create(login=new_user)
                 return redirect('deliverer')
-            case 'MN':
+            if t == 'MN':
                 Manager.objects.create(login=new_user)
                 return redirect('manager')
-            case _:
-                assert False, "Invalid user type"
-            
+        except Exception:
+            messages.warning(request, 'Account created but profile initialization failed. Please contact support.')
+            return redirect('index')
+
     return render(request, 'register.html')
 def update_cart(request):
     return render(request, 'cart.html')
