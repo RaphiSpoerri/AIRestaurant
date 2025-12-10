@@ -14,13 +14,23 @@
 </div>
 
 <div class="list-group">
-    {% for t in threads %}
+    {% for item in threads %}
+        {% with t=item.thread %}
         <a class="list-group-item list-group-item-action" href="{% url 'thread' thread_id=t.id %}">
             <div class="d-flex w-100 justify-content-between">
-                <h5 class="mb-1">{{ t.title }}</h5>
-                <small>{{ t.creation_date }}</small>
+                <div>
+                    <h5 class="mb-1">{{ t.title }}</h5>
+                    {% if item.last %}
+                        <div class="text-muted small">{{ item.last.who.name }}: {{ item.last.message|truncatechars:120 }}</div>
+                    {% endif %}
+                </div>
+                <div class="text-end">
+                    <small class="d-block">{{ t.creation_date }}</small>
+                    <small class="badge bg-secondary">{{ item.count }} msg{{ item.count|pluralize }}</small>
+                </div>
             </div>
         </a>
+        {% endwith %}
     {% empty %}
         <div class="alert alert-secondary">No threads found.</div>
     {% endfor %}
