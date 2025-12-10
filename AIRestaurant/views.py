@@ -13,6 +13,7 @@ from django.views.decorators.http import require_POST
 from .data.message import Thread
 from django.contrib.auth import authenticate, login, logout as auth_logout
 from django.urls import reverse
+
 def home(request):
     return render(request, 'index.html', {'user': request.user})
 def menu(request):
@@ -123,6 +124,17 @@ def login(request):
         password = request.POST.get('password')
         user = authenticate(request, username=name, password=password)
         if user is not None:
+            # Check if account is active (manager approval status)
+            status = getattr(user, 'status', 'AC')
+            if status != 'AC':
+                if status == 'PN':
+                    messages.error(request, 'Your account is pending manager approval. Please wait for approval.')
+                elif status == 'SU':
+                    messages.error(request, 'Your account has been suspended.')
+                else:
+                    messages.error(request, 'Your account is not active.')
+                return render(request, 'login.html')
+            
             # log the user in (create Django auth session)
             from django.contrib.auth import login as auth_login
             auth_login(request, user)
@@ -130,20 +142,6 @@ def login(request):
             # ensure our session key is set for legacy session usage
             request.session['user_id'] = user.id
             request.session.modified = True
-
-            # ensure profile objects exist for this user type (create if missing)
-            try:
-                if getattr(user, 'type', None) == 'CU' and not Customer.objects.filter(login=user).exists():
-                    Customer.objects.create(login=user)
-                if getattr(user, 'type', None) == 'CH' and not Chef.objects.filter(login=user).exists():
-                    Chef.objects.create(login=user)
-                if getattr(user, 'type', None) == 'DL' and not Deliverer.objects.filter(login=user).exists():
-                    Deliverer.objects.create(login=user)
-                if getattr(user, 'type', None) == 'MN' and not Manager.objects.filter(login=user).exists():
-                    Manager.objects.create(login=user)
-            except Exception:
-                # fail safe: don't block login on profile creation errors
-                pass
 
             # Redirect to appropriate dashboard based on user type
             user_type = getattr(user, 'type', None)
@@ -176,83 +174,30 @@ def logout(request):
 
     messages.info(request, 'You have been logged out.')
     return render(request, 'logout.html')
-def register(request):
-    """Register a new user with validation and friendly errors.
 
-    This uses Django's create_user to ensure passwords are hashed, sets the
-    custom `type` field, logs the user in via Django's auth system, and
-    creates the associated profile row for the chosen role (Customer/Chef/Deliverer/Manager).
-    """
-    USERTYPE = {'Customer': 'CU', 'Chef': 'CH', 'Deliverer': 'DL', 'Manager': 'MN'}
-
-    if request.method == 'POST':
-        role = request.POST.get('role', '')
-        t = USERTYPE.get(role)
-        username = request.POST.get('username', '').strip()
-        email = request.POST.get('email', '').strip()
-        password = request.POST.get('password', '')
-
-        # Basic validation
-        if not username or not email or not password or not t:
-            messages.error(request, 'Please fill in all required fields.')
-            return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
-
-        if DataUser.objects.filter(username=username).exists():
-            messages.error(request, 'That username is already taken.')
-            return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
-
-        if DataUser.objects.filter(email=email).exists():
-            messages.error(request, 'An account with that email already exists.')
-            return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
-
-        # Create the user and handle potential DB errors
-        try:
-            new_user = DataUser.objects.create_user(username=username, email=email, password=password)
-            new_user.type = t
-            new_user.save()
-        except IntegrityError:
-            messages.error(request, 'Unable to create account due to a database error. Please try again.')
-            return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
-
-        # Log the user in via Django auth and set legacy session key.
-        # Authenticate newly-created user so the auth backend is set, then login.
-        try:
-            auth_user = authenticate(request, username=username, password=password)
-            if auth_user is not None:
-                from django.contrib.auth import login as auth_login
-                auth_login(request, auth_user)
-                request.session['user_id'] = auth_user.id
-            else:
-                # fallback: set session id manually
-                request.session['user_id'] = new_user.id
-        except Exception:
-            request.session['user_id'] = new_user.id
-
-        request.session.modified = True
-
-        # Create profile record for the chosen type if missing and redirect
-        try:
-            if t == 'CU':
-                Customer.objects.create(login=new_user)
-                return redirect('customer')
-            if t == 'CH':
-                Chef.objects.create(login=new_user)
-                return redirect('chef')
-            if t == 'DL':
-                Deliverer.objects.create(login=new_user)
-                return redirect('deliverer')
-            if t == 'MN':
-                Manager.objects.create(login=new_user)
-                return redirect('manager')
-        except Exception:
-            messages.warning(request, 'Account created but profile initialization failed. Please contact support.')
-            return redirect('index')
-
-    return render(request, 'register.html')
 def update_cart(request):
     return render(request, 'cart.html')
 def cart(request):
     return render(request, 'cart.html')
+
+def chef(request):
+    """Redirect to current user's chef profile if authenticated."""
+    if request.user.is_authenticated:
+        return redirect('profile', user_id=request.user.id)
+    return render(request, 'chef.html')
+
+def deliverer(request):
+    """Redirect to current user's deliverer profile if authenticated."""
+    if request.user.is_authenticated:
+        return redirect('profile', user_id=request.user.id)
+    return render(request, 'deliverer.html')
+
+def manager(request):
+    """Redirect to current user's manager profile if authenticated."""
+    if request.user.is_authenticated:
+        return redirect('profile', user_id=request.user.id)
+    return render(request, 'manager.html', {'user': request.user, 'pending_users': DataUser.objects.filter(status='PN')})
+
 def __getattr__(name):
     return lambda request, *args: render(request, f'{name}.html', *args)
 
@@ -364,6 +309,10 @@ def profile_view(request, user_id):
     # private_visible: private fields shown to owner and managers
     context['private_visible'] = is_owner or is_manager_viewer
 
+    # For managers, include pending registration requests
+    if target.type == 'MN':
+        context['pending_users'] = list(DataUser.objects.filter(status='PN').order_by('date_joined'))
+
     # pick template by target type
     tpl_map = {'CU': 'customer.html', 'CH': 'chef.html', 'DL': 'deliverer.html', 'MN': 'manager.html'}
     tpl = tpl_map.get(target.type, 'customer.html')
@@ -439,7 +388,14 @@ def thread_view(request, thread_id):
 
 
 def register(request):
-    """Handle user registration with validation and graceful DB error handling."""
+    """Register a new user with pending approval status.
+    
+    Creates a User account with status='PN' (Pending Approval) but does NOT:
+    - Automatically create profile records (Customer/Chef/Deliverer/Manager)
+    - Log the user in or create a session
+    
+    Manager approval is required to activate the account and create profiles.
+    """
     USERTYPE = {'Customer': 'CU', 'Chef': 'CH', 'Deliverer': 'DL', 'Manager': 'MN'}
 
     if request.method == 'POST':
@@ -462,36 +418,61 @@ def register(request):
             messages.error(request, 'An account with that email already exists.')
             return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
 
-        # Create user inside try/except to catch any integrity problems
+        # Create user with pending approval status
         try:
             new_user = DataUser.objects.create_user(username=username, email=email, password=password)
-            # store custom type on the model and save
+            # Set type and status (pending approval by manager)
             new_user.type = t
+            new_user.status = 'PN'  # Pending Approval
             new_user.save()
         except IntegrityError:
             messages.error(request, 'Unable to create account due to a database error. Please try again.')
             return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
 
-        # Log the user in by storing their ID in the session (your codebase uses session-based auth)
-        request.session['user_id'] = new_user.id
-        request.session.modified = True
-
-        # Create profile records for specific user types and redirect to the appropriate dashboard
-        match t:
-            case 'CU':
-                Customer.objects.create(login=new_user)
-                return redirect('customer')
-            case 'CH':
-                Chef.objects.create(login=new_user)
-                return redirect('chef')
-            case 'DL':
-                Deliverer.objects.create(login=new_user)
-                return redirect('deliverer')
-            case 'MN':
-                Manager.objects.create(login=new_user)
-                return redirect('manager')
-            case _:
-                messages.error(request, 'Invalid user type selected.')
-                return render(request, 'register.html', {'username': username, 'email': email, 'role': role})
+        # Show success message and redirect to login
+        messages.success(request, 'Account created successfully. Please wait for manager approval before logging in.')
+        return redirect('login')
 
     return render(request, 'register.html')
+
+
+@require_POST
+@require_POST
+def approve_user(request, user_id):
+    """Manager approves a pending user registration and creates their profile."""
+    # Verify requester is a manager
+    viewer = request.user
+    viewer_type = getattr(viewer, 'type', None)
+    is_manager = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
+    
+    if not is_manager:
+        messages.error(request, 'Only managers can approve user registrations.')
+        return redirect('index')
+    
+    try:
+        user = DataUser.objects.get(id=user_id, status='PN')
+    except DataUser.DoesNotExist:
+        messages.error(request, 'User not found or already approved.')
+        return redirect('index')
+    
+    # Activate the user and create profile
+    try:
+        user.status = 'AC'
+        user.save()
+        
+        # Create profile record for the chosen type
+        if user.type == 'CU':
+            Customer.objects.create(login=user)
+        elif user.type == 'CH':
+            Chef.objects.create(login=user)
+        elif user.type == 'DL':
+            Deliverer.objects.create(login=user)
+        elif user.type == 'MN':
+            Manager.objects.create(login=user)
+        
+        messages.success(request, f'User {user.username} approved and profile created.')
+    except Exception as e:
+        messages.error(request, f'Error approving user: {str(e)}')
+    
+    # Redirect back to manager profile
+    return redirect('profile', user_id=viewer.id)

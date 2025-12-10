@@ -41,6 +41,7 @@ urlpatterns = [
     path('manage_menu/', views.manage_menu, name='manage_menu'),
     path('review_complaint/<int:complaint_id>/', views.review_complaint, name='review_complaint'),
     path('assign_order/<int:order_id>/', views.assign_order, name='assign_order'),
+    path('approve_user/<int:user_id>/', views.approve_user, name='approve_user'),
     
     # Order status update
     path('update_order_status/<int:order_id>/', views.update_order_status, name='update_order_status'),

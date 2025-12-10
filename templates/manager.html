@@ -15,34 +15,57 @@
       </div>
     </div>
 
+    {% if pending_users %}
     <div class="card mb-3">
-      <div class="card-header">Compliments</div>
+      <div class="card-header">
+        <h5 class="mb-0">Pending Registration Requests ({{ pending_users|length }})</h5>
+      </div>
       <div class="card-body">
-        {% for c in compliments %}
-          <div class="mb-2">
-            <strong><a href="{% url 'profile' c.sender.id %}">{{ c.sender.name }}</a></strong>:
-            {{ c.message.message }}
-          </div>
-        {% empty %}
-          <div>No compliments yet.</div>
-        {% endfor %}
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Type</th>
+                <th>Requested</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for pending_user in pending_users %}
+              <tr>
+                <td><strong>{{ pending_user.username }}</strong></td>
+                <td>{{ pending_user.email }}</td>
+                <td>
+                  <span class="badge bg-info">
+                    {% if pending_user.type == 'CU' %}Customer
+                    {% elif pending_user.type == 'CH' %}Chef
+                    {% elif pending_user.type == 'DL' %}Deliverer
+                    {% elif pending_user.type == 'MN' %}Manager
+                    {% else %}{{ pending_user.type }}{% endif %}
+                  </span>
+                </td>
+                <td><small>{{ pending_user.date_joined|date:"M d, Y H:i" }}</small></td>
+                <td>
+                  <form method="post" action="{% url 'approve_user' pending_user.id %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
+    {% else %}
+    <div class="alert alert-info" role="alert">
+      No pending registration requests at this time.
+    </div>
+    {% endif %}
 
-    <div class="card mb-3">
-      <div class="card-header">Complaints</div>
-      <div class="card-body">
-        {% for cp in complaints %}
-            <div class="mb-2">
-              <strong>{{ cp.sender.name }}</strong>:
-              {{ cp.message.message }}
-              <div><small class="text-muted">Status: {{ cp.get_status_display }}</small></div>
-            </div>
-        {% empty %}
-          <div>No complaints recorded.</div>
-        {% endfor %}
-      </div>
-    </div>
   </div>
 
   <div class="col-md-4">

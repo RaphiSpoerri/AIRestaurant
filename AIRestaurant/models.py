@@ -1,7 +1,7 @@
 
-from .data.users import *
-from .data.customer import *
-from .data.deliverer import *
-from .data.manager import *
-from .data.message import *
-from .data.chef import *
+from .data.users import User, Employee
+from .data.customer import Customer
+from .data.deliverer import Deliverer, Order, OrderedDish
+from .data.manager import Manager
+from .data.message import Thread, Message, Compliment, Complaint
+from .data.chef import Chef, Dish, DishRating

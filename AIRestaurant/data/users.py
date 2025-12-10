@@ -3,11 +3,17 @@
 from django.db.models import *
 from django.contrib.auth.models import AbstractUser
 
+
+
 class User(AbstractUser):
     id          = AutoField(primary_key=True)
     username    = CharField(max_length=40, unique=True, default="")
     email       = CharField(max_length=40, unique=True)
     password    = CharField(max_length=40)
+    status      = CharField(max_length=2, choices=[
+        ('AC', 'Active'),
+        ('SU', 'Suspended'),
+        ('PN', 'Pending Approval')], default='PN')
     type        = CharField(max_length=2, choices=[
         ('CU', 'Customer'),
         ('DL', 'Deliverer'),

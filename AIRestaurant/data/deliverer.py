@@ -8,6 +8,8 @@ from .chef import Dish
 
 class Order(Model):
     id = AutoField(primary_key=True)
+    date = DateTimeField(auto_now_add=True)
+    status = CharField(max_length=20, default='pending')
 
 class OrderedDish(Model):
     from_order_num = ForeignKey(Order, CASCADE)

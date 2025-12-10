@@ -38,9 +38,3 @@ class Customer(Model):
         """
         pass
 
-
-class DishRating(Model):
-    dish    = ForeignKey(Dish, CASCADE)
-    who     = ForeignKey(Customer, CASCADE)
-    rating  = IntegerField()
-
