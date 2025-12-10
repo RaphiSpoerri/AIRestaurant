@@ -87,7 +87,7 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
     element.innerHTML = "0s";
     messagesDiv.appendChild(element);
     var timer = setInterval(() => element.innerHTML = ++n + "s", 1000);
-    fetch({% url 'ai_chat_query' %}, {
+    fetch({% url 'ai_chat' %}, {
         method: 'POST',
         headers: {
             "Content-Type": "application/x-www-form-urlencoded",

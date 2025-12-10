@@ -232,15 +232,23 @@ def customer(request, profile: str = None):
     return profile_view(request, user.id)
 
 def ai_chat(request):
-    AI_PATH = "/home/SapphireBrick613/AI"
     if request.method != 'POST':
-        return render(request, 'ai_chat')
-    question = unquote(request.POST.get('query'))
-    result = shell(
-        [f'{AI_PATH}/llama-run', f'{AI_PATH}/tinyllama-1.1b-chat-v1.0.Q4_0.gguf'],
-        capture_output=True,
-        input=question,
-        encoding='utf-8')
+        return render(request, 'ai_chat.html')
+    if "testing":
+        question = unquote(request.POST.get('query'))
+        result = shell(
+            [f'llama-run', f'/Users/raphispoerri/College/csc322/tinyllama-1.1b-chat-v1.0.Q4_0.gguf'],
+            capture_output=True,
+            input=question,
+            encoding='utf-8')
+    else:
+        AI_PATH = "/home/SapphireBrick613/AI"
+        question = unquote(request.POST.get('query'))
+        result = shell(
+            [f'{AI_PATH}/llama-run', f'{AI_PATH}/tinyllama-1.1b-chat-v1.0.Q4_0.gguf'],
+            capture_output=True,
+            input=question,
+            encoding='utf-8')
     response = result.stdout.replace("\x1b[0m", "") if result.returncode == 0 else "<AI failed>"
 
     return JsonResponse({
