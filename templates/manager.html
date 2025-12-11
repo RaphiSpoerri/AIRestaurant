@@ -233,6 +233,51 @@
       </div>
     </div>
 
+    <div class="card mb-3 mt-4">
+      <div class="card-header">
+        <h5 class="mb-0">Reported FAQ Entries{% if reported_faqs %} ({{ reported_faqs|length }}){% endif %}</h5>
+      </div>
+      <div class="card-body">
+        {% if reported_faqs %}
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Question</th>
+                <th>Reported By</th>
+                <th>Reported At</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for report in reported_faqs %}
+              <tr>
+                <td style="max-width: 400px; white-space: pre-wrap;">{{ report.faq_entry.question }}</td>
+                <td>{{ report.reported_by.username }}</td>
+                <td><small>{{ report.reported_at|date:"M d, Y H:i" }}</small></td>
+                <td>
+                  <form method="post" action="{% url 'keep_faq' report.id %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-success mb-1">Keep</button>
+                  </form>
+                  <form method="post" action="{% url 'delete_faq' report.id %}" style="display:inline;" class="ms-1">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-0" role="alert">
+          There are currently no reported FAQ entries.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
   </div>
 
   <div class="col-md-4">

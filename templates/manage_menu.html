@@ -41,8 +41,8 @@
                     {% endif %}
                 </td>
                 <td>{{ item.name }}</td>
-                <td>${{item.price|format_cents_as_money }}</td>
-                <td>{{ item.creator.username|default:"Unassigned" }}</td>
+                <td>{{item.price|format_cents_as_money }}</td>
+                <td>{{item.creator.username|default:"Unassigned" }}</td>
                 
                 <td>
                     <button type="button" class="btn btn-sm btn-primary" 

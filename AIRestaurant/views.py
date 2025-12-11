@@ -5,6 +5,7 @@ from subprocess import run as shell
 from urllib.parse import unquote
 from django.shortcuts import get_object_or_404
 from types import SimpleNamespace
+import socket
 from .models import (
     User as DataUser,
     Customer,
@@ -21,6 +22,7 @@ from .models import (
     OrderedDish,
     Plea,
     FAQEntry,
+    ReportedFAQ,
     Bid,
 )
 from django.db.models import Avg, Count
@@ -214,14 +216,6 @@ def deposit(request):
         return redirect('deposit')
 
     return render(request, 'deposit.html', {'customer': customer, 'form': {}})
-
-def rate_ai_response(request, rating_id):
-    """Stub: record a rating for an AI response and return JSON."""
-    if request.method == 'POST':
-        # placeholder: in real app, save rating to DB
-        return JsonResponse({'status': 'ok', 'rating_id': rating_id})
-    return JsonResponse({'error': 'POST required'}, status=400)
-
 
 def remove_from_cart(request, menu_id):
     """Remove a dish from the session-based cart and redirect back."""
@@ -1070,10 +1064,11 @@ def customer(request, profile: str = None):
     return profile_view(request, user.id)
 
 def ai_chat(request):
+    
     # API-style endpoint used by FAQ page; POST only.
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)
-    if False:
+    if socket.gethostname().endswith('.local'):
         question = unquote(request.POST.get('query'))
         result = shell(
             [f'llama-run', f'/Users/raphispoerri/College/csc322/tinyllama-1.1b-chat-v1.0.Q4_0.gguf'],
@@ -1225,6 +1220,13 @@ def profile_view(request, user_id):
             .order_by('-date')
         )
 
+        # Reported FAQ entries
+        context['reported_faqs'] = list(
+            ReportedFAQ.objects.filter(status='pending')
+            .select_related('faq_entry', 'reported_by')
+            .order_by('-reported_at')
+        )
+
     # pick template by target type
     tpl_map = {'CU': 'customer.html', 'CH': 'chef.html', 'DL': 'deliverer.html', 'MN': 'manager.html'}
     tpl = tpl_map.get(target.type, 'customer.html')
@@ -1314,16 +1316,70 @@ def manage_users(request):
         messages.error(request, 'Only managers can view the user management page.')
         return redirect('index')
 
-    users = list(
-        DataUser.objects.all()
-        .order_by('id')
-    )
-
     # Preload related profile/employee objects
     from .data.customer import Customer as CustomerProfile
     from .data.chef import Chef as ChefProfile
     from .data.deliverer import Deliverer as DelivererProfile
     from .data.manager import Manager as ManagerProfile
+
+    # Handle inline updates from the manage_users page
+    if request.method == 'POST':
+        user_id = request.POST.get('user_id')
+        if not user_id:
+            messages.error(request, 'Missing user id for update.')
+            return redirect('manage_users')
+        try:
+            target = DataUser.objects.get(id=int(user_id))
+        except (ValueError, DataUser.DoesNotExist):
+            messages.error(request, 'User not found.')
+            return redirect('manage_users')
+
+        # Update basic account status
+        new_status = request.POST.get('status')
+        if new_status in ['AC', 'SU', 'PN']:
+            if target.status != new_status:
+                target.status = new_status
+                target.save(update_fields=['status'])
+
+        # For customers, allow editing warnings and VIP flag
+        if target.type == 'CU':
+            profile = CustomerProfile.objects.filter(login=target).first()
+            if profile is not None:
+                warnings_val = request.POST.get('warnings')
+                if warnings_val is not None:
+                    try:
+                        profile.warnings = max(0, int(warnings_val))
+                    except ValueError:
+                        pass
+                profile.vip = bool(request.POST.get('vip'))
+                profile.save(update_fields=['warnings', 'vip'])
+
+        # For employees (chefs, deliverers, managers), allow editing salary
+        if target.type in ('CH', 'DL', 'MN'):
+            profile = None
+            if target.type == 'CH':
+                profile = ChefProfile.objects.filter(login=target).first()
+            elif target.type == 'DL':
+                profile = DelivererProfile.objects.filter(login=target).first()
+            elif target.type == 'MN':
+                profile = ManagerProfile.objects.filter(login=target).first()
+            if profile is not None:
+                salary_val = request.POST.get('salary')
+                if salary_val is not None:
+                    try:
+                        salary_cents = int(float(salary_val) * 100)
+                        profile.salary = salary_cents
+                        profile.save(update_fields=['salary'])
+                    except ValueError:
+                        pass
+
+        messages.success(request, f'User {target.username} updated.')
+        return redirect('manage_users')
+
+    users = list(
+        DataUser.objects.all()
+        .order_by('id')
+    )
 
     customer_map = {c.login_id: c for c in CustomerProfile.objects.all()}
     chef_map = {c.login_id: c for c in ChefProfile.objects.all()}
@@ -1581,3 +1637,67 @@ def faq(request):
         # Always pass the current query so AI can answer alongside results
         'initial_query': search_query,
     })
+
+@require_POST
+def report_faq(request):
+    """Allow users to report an FAQ entry to managers."""
+    if not request.user.is_authenticated:
+        messages.error(request, 'You must be logged in to report FAQ entries.')
+        return redirect('login')
+    
+    entry_id = request.POST.get('entry_id')
+    if not entry_id:
+        messages.error(request, 'Invalid request.')
+        return redirect('faq')
+    
+    try:
+        entry = FAQEntry.objects.get(id=int(entry_id))
+    except (ValueError, FAQEntry.DoesNotExist):
+        messages.error(request, 'FAQ entry not found.')
+        return redirect('faq')
+    
+    # Check if already reported by this user
+    if ReportedFAQ.objects.filter(faq_entry=entry, reported_by=request.user).exists():
+        messages.warning(request, 'You have already reported this FAQ entry.')
+        return redirect('faq')
+    
+    # Create report
+    ReportedFAQ.objects.create(faq_entry=entry, reported_by=request.user)
+    messages.success(request, 'FAQ entry reported to managers.')
+    return redirect('faq')
+
+@require_POST
+def keep_faq(request, report_id):
+    """Manager action: mark a reported FAQ as kept."""
+    viewer = request.user
+    viewer_type = getattr(viewer, 'type', None)
+    is_manager = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
+
+    if not is_manager:
+        messages.error(request, 'Only managers can review reported FAQ entries.')
+        return redirect('index')
+
+    report = get_object_or_404(ReportedFAQ, pk=report_id)
+    report.status = 'kept'
+    report.save(update_fields=['status'])
+    messages.success(request, 'FAQ entry has been kept.')
+    return redirect('profile', user_id=viewer.id)
+
+@require_POST
+def delete_faq(request, report_id):
+    """Manager action: delete a reported FAQ entry."""
+    viewer = request.user
+    viewer_type = getattr(viewer, 'type', None)
+    is_manager = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
+
+    if not is_manager:
+        messages.error(request, 'Only managers can review reported FAQ entries.')
+        return redirect('index')
+
+    report = get_object_or_404(ReportedFAQ, pk=report_id)
+    faq_entry = report.faq_entry
+    report.status = 'deleted'
+    report.save(update_fields=['status'])
+    faq_entry.delete()  # Delete the FAQ entry
+    messages.success(request, 'FAQ entry has been deleted.')
+    return redirect('profile', user_id=viewer.id)

@@ -76,6 +76,13 @@
                                         by anonymous
                                     {% endif %}
                                 </small>
+                                {% if user.is_authenticated and user.type != 'MN' %}
+                                <form method="post" action="{% url 'report_faq' %}" style="display:inline;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning">Report</button>
+                                </form>
+                                {% endif %}
                             </div>
                         </div>
                     {% endfor %}
@@ -112,6 +119,13 @@
                                         by anonymous
                                     {% endif %}
                                 </small>
+                                {% if user.is_authenticated and user.type != 'MN' %}
+                                <form method="post" action="{% url 'report_faq' %}" style="display:inline;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning">Report</button>
+                                </form>
+                                {% endif %}
                             </div>
                         </div>
                     {% endfor %}

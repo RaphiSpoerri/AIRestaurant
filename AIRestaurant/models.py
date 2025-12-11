@@ -5,4 +5,4 @@ from .data.deliverer import Deliverer, Order, OrderedDish, Bid
 from .data.manager import Manager, Plea
 from .data.message import Thread, Message, Compliment, Complaint
 from .data.chef import Chef, Product, ProductRating
-from .data.faq import FAQEntry
+from .data.faq import FAQEntry, ReportedFAQ
