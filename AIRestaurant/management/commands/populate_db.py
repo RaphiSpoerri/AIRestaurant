@@ -155,7 +155,7 @@ class Command(BaseCommand):
                 order_items.append(OrderedDish(product=dish, quantity=1))
 
             order = ploni_customer.order(order_items, order_type='food')
-            order.status = 'completed'
+            order.status = 'delivered'
             order.save(update_fields=["status"])
             self.stdout.write(self.style.SUCCESS(f'✓ Created completed order {i+1} for Ploni Almoni'))
 
