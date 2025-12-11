@@ -1,0 +1,39 @@
+{% extends "./base.html" %}
+
+{% block title %}Account Suspended - AI Restaurant{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+  <div class="col-md-8">
+    <div class="card border-danger">
+      <div class="card-header bg-danger text-white">
+        <h3 class="mb-0">Account Suspended</h3>
+      </div>
+      <div class="card-body">
+        <p class="lead">Your customer account has been suspended due to too many warnings.</p>
+        <p>
+          A manager will review your activity and decide whether to restore your
+          access. If you believe this was a mistake or would like to ask for
+          another chance, you can send a message to the manager below.
+        </p>
+
+        <form method="post" action="{% url 'suspended_notice' %}">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label for="plea" class="form-label">Message to the manager</label>
+            <textarea id="plea" name="plea" rows="5" class="form-control" placeholder="Explain why you should be given another chance..." required></textarea>
+          </div>
+          <div class="d-flex justify-content-between">
+            <a href="{% url 'index' %}" class="btn btn-secondary">
+              Return to Home
+            </a>
+            <button type="submit" class="btn btn-danger">
+              Send Plea to Manager
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

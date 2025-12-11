@@ -1,15 +1,17 @@
 from django.shortcuts import render
 from django.http import JsonResponse
+import json
 from subprocess import run as shell
 from urllib.parse import unquote
 from django.shortcuts import get_object_or_404
-from .models import User as DataUser, Customer, DishRating, Dish, Deliverer, Chef, Manager, Compliment, Complaint, Message
-from django.db.models import Avg
+from .models import User as DataUser, Customer, DishRating, Dish, Deliverer, Chef, Manager, Compliment, Complaint, Message, Employee, Order, OrderedDish, Plea
+from django.db.models import Avg, Count
 from django.utils import timezone
 from django.shortcuts import redirect
 from django.contrib import messages
 from django.db import IntegrityError
 from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
 from .data.message import Thread
 from django.contrib.auth import authenticate, login, logout as auth_logout
 from django.urls import reverse
@@ -17,13 +19,103 @@ from django.urls import reverse
 def home(request):
     return render(request, 'index.html', {'user': request.user})
 def menu(request):
-    return render(request, 'menu.html', {'dishes': Dish.objects.all().values()})
+    """Show menu with rating metadata for each dish.
+
+    Provides per-dish average rating and rating count, and exposes a
+    simple `can_rate` flag used by the template for logged-in customers.
+    """
+    dishes_qs = Dish.objects.all().annotate(
+        avg_rating=Avg('dishrating__rating'),
+        rating_count=Count('dishrating')
+    )
+
+    is_customer = (
+        request.user.is_authenticated and
+        getattr(request.user, 'type', None) == 'CU'
+    )
+
+    # Attach convenient attributes used by the template
+    dishes = []
+    for d in dishes_qs:
+        d.average_rating = (d.avg_rating or 0)
+        d.rating_count = d.rating_count
+        d.can_rate = is_customer
+        dishes.append(d)
+
+    return render(request, 'menu.html', {'dishes': dishes})
 def add_to_cart(request):
     return render(request, 'cart.html')
 
+@csrf_exempt
+@require_POST
 def rate_dish(request, dish_id):
-    return render(request, 'rate_dish.html', {'dish_id': dish_id})
+    """Receive an AJAX rating for a dish and persist it.
 
+    For now we treat ratings as per-customer using the Employee model as a
+    generic "rater" record keyed by the Django User.
+    """
+    # Allow any authenticated user to rate dishes; primary restriction is login.
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'You must be logged in to rate dishes.'}, status=403)
+
+    try:
+        rating_val = int(request.POST.get('rating', '0'))
+    except ValueError:
+        return JsonResponse({'error': 'Invalid rating value.'}, status=400)
+
+    if rating_val < 1 or rating_val > 5:
+        return JsonResponse({'error': 'Rating must be between 1 and 5.'}, status=400)
+
+    dish = get_object_or_404(Dish, pk=dish_id)
+
+    # Ensure we have an Employee record linked to this user so
+    # DishRating(unique_together=(dish, who)) can store per-user ratings.
+    rater, _ = Employee.objects.get_or_create(login=request.user)
+
+    dr, _ = DishRating.objects.get_or_create(dish=dish, who=rater)
+    dr.rating = rating_val
+    dr.save()
+
+    # Recompute aggregate rating info to return to the client if needed
+    agg = DishRating.objects.filter(dish=dish).aggregate(avg=Avg('rating'), count=Count('id'))
+    return JsonResponse({
+        'status': 'ok',
+        'dish_id': dish.id,
+        'average_rating': agg['avg'] or 0,
+        'rating_count': agg['count'] or 0,
+    })
+
+def deposit(request):
+    # Ensure user is authenticated and is a customer
+    if not request.user.is_authenticated:
+        messages.error(request, 'Please log in to access the deposit page.')
+        return redirect('login')
+    
+    try:
+        customer = Customer.objects.get(login=request.user)
+    except Customer.DoesNotExist:
+        messages.error(request, 'Customer profile not found.')
+        return redirect('index')
+    
+    if request.method == 'POST':
+        amount_str = request.POST.get('amount', '0').strip()
+        try:
+            # Convert dollars to cents
+            amount_cents = int(float(amount_str) * 100)
+            if amount_cents <= 0:
+                raise ValueError("Amount must be positive.")
+        except ValueError:
+            messages.error(request, 'Please enter a valid positive amount.')
+            return render(request, 'deposit.html', {'customer': customer, 'form': {'amount': amount_str}})
+
+        # Update user balance
+        customer.balance += amount_cents
+        customer.save()
+
+        messages.success(request, f'Successfully deposited ${amount_cents / 100:.2f} to your account.')
+        return redirect('deposit')
+
+    return render(request, 'deposit.html', {'customer': customer, 'form': {}})
 
 def rate_ai_response(request, rating_id):
     """Stub: record a rating for an AI response and return JSON."""
@@ -34,16 +126,89 @@ def rate_ai_response(request, rating_id):
 
 
 def remove_from_cart(request, menu_id):
-    # placeholder: remove item from session/cart then redirect
+    """Remove a dish from the session-based cart and redirect back."""
+    if request.method == 'POST':
+        cart = request.session.get('cart', {}) or {}
+        cart.pop(str(menu_id), None)
+        request.session['cart'] = cart
+        request.session.modified = True
     return redirect('cart')
 
 
 def place_order(request):
-    # placeholder: show place order page or handle POST to create order
-    if request.method == 'POST':
-        # process order creation here
-        return redirect('order_history')
-    return render(request, 'place_order.html')
+    """Finalize an order: persist Order/OrderedDish and charge balance."""
+    if request.method != 'POST':
+        messages.error(request, 'Use the checkout form to place an order.')
+        return redirect('cart')
+
+    if not request.user.is_authenticated or getattr(request.user, 'type', None) != 'CU':
+        messages.error(request, 'Only logged-in customers can place orders.')
+        return redirect('login')
+
+    try:
+        customer = Customer.objects.get(login=request.user)
+    except Customer.DoesNotExist:
+        messages.error(request, 'Customer profile not found.')
+        return redirect('index')
+
+    cart = request.session.get('cart', {}) or {}
+    if not cart:
+        messages.error(request, 'Your cart is empty.')
+        return redirect('menu')
+
+    # Compute total in cents based on dish prices and prepare OrderedDish list
+    dish_ids = [int(did) for did in cart.keys()]
+    dishes = {d.id: d for d in Dish.objects.filter(id__in=dish_ids)}
+
+    total_cents = 0
+    ordered_rows = []
+    for dish_id_str, qty in cart.items():
+        try:
+            qty = int(qty)
+        except (TypeError, ValueError):
+            qty = 0
+        if qty <= 0:
+            continue
+        dish = dishes.get(int(dish_id_str))
+        if not dish:
+            continue
+        total_cents += dish.price * qty
+        ordered_rows.append(OrderedDish(dish=dish, quantity=qty))
+
+    if total_cents <= 0 or not ordered_rows:
+        messages.error(request, 'Unable to calculate order total.')
+        return redirect('cart')
+
+    if customer.balance < total_cents:
+        # Not enough balance: add a warning
+        customer.add_warning()
+
+        # If this pushed the customer into suspended status, redirect to the
+        # suspension notice and remember which account is suspended via a
+        # dedicated cookie (independent of the auth session).
+        if customer.login.status == 'SU':
+            response = redirect('suspended_notice')
+            response.set_cookie('suspended_user_id', str(customer.login.id), max_age=3600, httponly=True, samesite='Lax')
+            return response
+
+        messages.error(request, 'Insufficient balance. Your warning count has increased by one.')
+        return redirect('cart')
+
+    # Use the domain method to create an Order and charge balance
+    try:
+        order = customer.order(ordered_rows)
+        order.customer = customer
+        order.save()
+    except ValueError as e:
+        messages.error(request, str(e))
+        return redirect('cart')
+
+    # Clear cart after successful charge
+    request.session['cart'] = {}
+    request.session.modified = True
+
+    messages.success(request, f'Order placed successfully for ${total_cents / 100:.2f}.')
+    return redirect('order_history')
 
 
 def rate_chef(request, order_id):
@@ -53,45 +218,71 @@ def rate_chef(request, order_id):
     return render(request, 'rate_chef.html', {'order_id': order_id})
 
 
-def file_complaint(request):
+def suspended_notice(request):
+    """Show a suspension notice to customers flagged as suspended.
+
+    Allows them to submit a plea message to managers. We track the
+    suspended account via a dedicated cookie so that even after logging
+    out of the current auth session, we can still associate the plea
+    with the correct User record.
+    """
+    suspended_user = None
+    suspended_id = request.COOKIES.get('suspended_user_id')
+    need_set_cookie = False
+
+    # Try to resolve suspended account from the cookie first.
+    if suspended_id:
+        try:
+            suspended_user = DataUser.objects.filter(pk=int(suspended_id)).first()
+        except (TypeError, ValueError):
+            suspended_user = None
+
+    # Fallback: if no cookie yet but the request user is a suspended
+    # customer, treat them as the suspended account and arrange to set
+    # the cookie in the response.
+    if suspended_user is None and request.user.is_authenticated:
+        if getattr(request.user, 'type', None) == 'CU' and getattr(request.user, 'status', 'AC') == 'SU':
+            suspended_user = request.user
+            need_set_cookie = True
+
+    # Validate that we actually have a suspended customer account.
+    if suspended_user is None or getattr(suspended_user, 'type', None) != 'CU':
+        messages.error(request, 'Suspension notices are only for customer accounts.')
+        return redirect('index')
+
+    if getattr(suspended_user, 'status', 'AC') != 'SU':
+        return redirect('index')
+
+    plea_created = False
     if request.method == 'POST':
-        # handle complaint submission
-        return redirect('my_complaints')
-    return render(request, 'file_complaint.html')
+        plea = request.POST.get('plea', '').strip()
+        if plea:
+            Plea.objects.create(sender=suspended_user, text=plea)
+            messages.success(request, 'Your message has been sent to the manager for review.')
+            plea_created = True
+        else:
+            messages.error(request, 'Please enter a message before submitting.')
 
+    # Once the notice has been shown, log out any active auth session so
+    # the suspended account no longer appears as logged in.
+    if request.user.is_authenticated:
+        try:
+            auth_logout(request)
+        except Exception:
+            pass
 
-def file_compliment(request):
-    if request.method == 'POST':
-        # handle compliment submission
-        return redirect('profile')
-    return render(request, 'file_compliment.html')
+    response = render(request, 'suspended_notice.html', {'suspended_user': suspended_user})
 
+    # Ensure the suspended id cookie is set for subsequent POSTs if it
+    # wasn't already present.
+    if need_set_cookie:
+        response.set_cookie('suspended_user_id', str(suspended_user.id), max_age=3600, httponly=True, samesite='Lax')
 
-def my_complaints(request):
-    return render(request, 'my_complaints.html')
+    # After a successful plea submission, we can drop the cookie.
+    if plea_created:
+        response.delete_cookie('suspended_user_id')
 
-
-def available_orders(request):
-    return render(request, 'available_orders.html')
-
-
-def delivery_bid(request, order_id):
-    if request.method == 'POST':
-        # handle bid
-        return redirect('available_orders')
-    return render(request, 'delivery_bid.html', {'order_id': order_id})
-
-
-def my_deliveries(request):
-    return render(request, 'my_deliveries.html')
-def discussions(request):
-    return render(request, 'discussions.html')
-
-def manage_menu(request):
-    if request.method == 'POST':
-        # handle menu changes
-        return redirect('manage_menu')
-    return render(request, 'manage_menu.html')
+    return response
 
 
 def review_complaint(request, complaint_id):
@@ -99,6 +290,59 @@ def review_complaint(request, complaint_id):
         # handle review action
         return redirect('my_complaints')
     return render(request, 'review_complaint.html', {'complaint_id': complaint_id})
+
+
+@require_POST
+def plea_kick(request, plea_id):
+    """Manager action: permanently remove a suspended user and their plea."""
+    viewer = request.user
+    viewer_type = getattr(viewer, 'type', None)
+    is_manager = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
+
+    if not is_manager:
+        messages.error(request, 'Only managers can process pleas.')
+        return redirect('index')
+
+    plea = get_object_or_404(Plea, pk=plea_id)
+    user = plea.sender
+    username = user.username
+
+    # Delete the user; related Customer and other rows will cascade
+    user.delete()
+    plea.delete()
+
+    messages.success(request, f'User {username} has been removed and their plea closed.')
+    return redirect('profile', user_id=viewer.id)
+
+
+@require_POST
+def plea_forgive(request, plea_id):
+    """Manager action: reduce warnings, reactivate account, and close plea."""
+    viewer = request.user
+    viewer_type = getattr(viewer, 'type', None)
+    is_manager = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
+
+    if not is_manager:
+        messages.error(request, 'Only managers can process pleas.')
+        return redirect('index')
+
+    plea = get_object_or_404(Plea, pk=plea_id)
+    user = plea.sender
+
+    customer = Customer.objects.filter(login=user).first()
+    if customer:
+        if customer.warnings > 0:
+            customer.warnings -= 1
+        customer.save()
+
+    # Reactivate account
+    user.status = 'AC'
+    user.save(update_fields=['status'])
+
+    plea.delete()
+
+    messages.success(request, f'User {user.username} has been reactivated and their warnings reduced.')
+    return redirect('profile', user_id=viewer.id)
 
 
 def assign_order(request, order_id):
@@ -113,6 +357,28 @@ def update_order_status(request, order_id):
         # update status logic
         return redirect('order_history')
     return redirect('order_history')
+def order_history(request):
+    """Show the current customer's past orders with items and totals."""
+    if not request.user.is_authenticated or getattr(request.user, 'type', None) != 'CU':
+        messages.error(request, 'Please log in as a customer to view your order history.')
+        return redirect('login')
+
+    try:
+        customer = Customer.objects.get(login=request.user)
+    except Customer.DoesNotExist:
+        messages.error(request, 'Customer profile not found.')
+        return redirect('index')
+
+    orders = Order.objects.filter(customer=customer).prefetch_related('items__dish').order_by('-date')
+
+    # For compatibility with the existing template, annotate simple totals
+    for o in orders:
+        total_cents = sum(od.total_cost() for od in o.items.all())
+        o.total_amount = total_cents / 100.0
+        # Template expects `timestamp`; alias our `date` field
+        o.timestamp = o.date
+
+    return render(request, 'order_history.html', {'orders': orders})
 def login(request):
     if request.method == 'POST':
         name = request.POST.get('username')
@@ -138,17 +404,10 @@ def login(request):
             request.session['user_id'] = user.id
             request.session.modified = True
 
-            # Redirect to appropriate dashboard based on user type
-            user_type = getattr(user, 'type', None)
-            if user_type == 'CU':
-                # Redirect to the customer page using query string (works with PA and local)
-                return redirect(f"{reverse('customer')}?profile={user.username}")
-            elif user_type == 'CH':
-                return redirect('chef')
-            elif user_type == 'DL':
-                return redirect('deliverer')
-            elif user_type == 'MN':
-                return redirect('manager')
+            # Redirect to the unified profile view for this user id.
+            # The profile view chooses the correct template based on user.type
+            # (customer/chef/deliverer/manager) so the correct data is shown.
+            return redirect('profile', user_id=user.id)
         else:
             messages.error(request, 'Invalid email or password.')
     return render(request, 'login.html')
@@ -171,9 +430,83 @@ def logout(request):
     return render(request, 'logout.html')
 
 def update_cart(request):
-    return render(request, 'cart.html')
+    """Store the current cart (dish id -> quantity) in the session.
+
+    Expects a POST with a JSON-encoded `cart` payload from menu.js.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=400)
+
+    if not request.user.is_authenticated or getattr(request.user, 'type', None) != 'CU':
+        return JsonResponse({'error': 'Only logged-in customers can use the cart.'}, status=403)
+
+    cart_json = request.POST.get('cart', '{}')
+    try:
+        cart_data = json.loads(cart_json)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid cart payload.'}, status=400)
+
+    # Normalize quantities to integers >= 0
+    normalized = {}
+    for dish_id, qty in cart_data.items():
+        try:
+            qty_int = int(qty)
+        except (TypeError, ValueError):
+            continue
+        if qty_int > 0:
+            normalized[str(dish_id)] = qty_int
+
+    request.session['cart'] = normalized
+    request.session.modified = True
+    return JsonResponse({'status': 'ok'})
+
+
 def cart(request):
-    return render(request, 'cart.html')
+    """Render the cart page based on the session cart contents."""
+    if not request.user.is_authenticated or getattr(request.user, 'type', None) != 'CU':
+        messages.error(request, 'Please log in as a customer to view your cart.')
+        return redirect('login')
+
+    try:
+        customer = Customer.objects.get(login=request.user)
+    except Customer.DoesNotExist:
+        messages.error(request, 'Customer profile not found.')
+        return redirect('index')
+
+    session_cart = request.session.get('cart', {}) or {}
+    if not session_cart:
+        return render(request, 'cart.html', {'cart': {}, 'total': 0, 'customer': customer})
+
+    dish_ids = [int(did) for did in session_cart.keys()]
+    dishes = {d.id: d for d in Dish.objects.filter(id__in=dish_ids)}
+
+    cart_items = {}
+    total_cents = 0
+    for dish_id_str, qty in session_cart.items():
+        try:
+            qty = int(qty)
+        except (TypeError, ValueError):
+            continue
+        if qty <= 0:
+            continue
+        dish = dishes.get(int(dish_id_str))
+        if not dish:
+            continue
+        price_cents = dish.price
+        subtotal_cents = price_cents * qty
+        total_cents += subtotal_cents
+        cart_items[int(dish_id_str)] = {
+            'name': dish.name,
+            'price': price_cents,
+            'quantity': qty,
+            'subtotal': subtotal_cents,
+        }
+
+    return render(request, 'cart.html', {
+        'cart': cart_items,
+        'total': total_cents,
+        'customer': customer,
+    })
 
 def chef(request):
     """Redirect to current user's chef profile if authenticated."""
@@ -312,9 +645,10 @@ def profile_view(request, user_id):
     # private_visible: private fields shown to owner and managers
     context['private_visible'] = is_owner or is_manager_viewer
 
-    # For managers, include pending registration requests
+    # For managers, include pending registration requests and pleas
     if target.type == 'MN':
         context['pending_users'] = list(DataUser.objects.filter(status='PN').order_by('date_joined'))
+        context['pleas'] = list(Plea.objects.select_related('sender').order_by('-created_at'))
 
     # pick template by target type
     tpl_map = {'CU': 'customer.html', 'CH': 'chef.html', 'DL': 'deliverer.html', 'MN': 'manager.html'}

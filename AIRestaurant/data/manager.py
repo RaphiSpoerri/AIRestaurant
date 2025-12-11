@@ -1,7 +1,7 @@
 
 from django.db.models import *
 from .users import User
-
+from django.db.models import CASCADE
 class Manager(Model):
     login = OneToOneField(User, CASCADE)
 
@@ -25,3 +25,9 @@ class Manager(Model):
         if user.type == 'MN':
             Manager.objects.create(login=new_user)
             return redirect('manager')
+
+
+class Plea(Model):
+    sender = ForeignKey(User, CASCADE)
+    text = CharField(max_length=500)
+    created_at = DateTimeField(auto_now_add=True)

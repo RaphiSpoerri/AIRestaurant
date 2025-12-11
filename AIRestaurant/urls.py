@@ -29,6 +29,9 @@ urlpatterns = [
     path('file_complaint/', views.file_complaint, name='file_complaint'),
     path('file_compliment/', views.file_compliment, name='file_compliment'),
     path('my_complaints/', views.my_complaints, name='my_complaints'),
+    path('suspended/', views.suspended_notice, name='suspended_notice'),
+    path('plea/<int:plea_id>/kick/', views.plea_kick, name='plea_kick'),
+    path('plea/<int:plea_id>/forgive/', views.plea_forgive, name='plea_forgive'),
     
     # Delivery pages
     path('available_orders/', views.available_orders, name='available_orders'),

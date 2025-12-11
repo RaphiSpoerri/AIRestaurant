@@ -4,9 +4,7 @@ from django.db.models import *
 from .users import Employee
 
 class Chef(Employee):
-    def create_dish(self, name, img):
-        # TODO: create a Dish object, setting price to "null", and call .save()
-        raise NotImplementedError()
+    pass
 
 class Dish(Model):
     name    = CharField(max_length=50)

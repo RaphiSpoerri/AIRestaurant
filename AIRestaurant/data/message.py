@@ -10,13 +10,13 @@ class Thread(Model):
     creation_date = DateTimeField()
 
 class Message(Model):
-    thread  = ForeignKey(Thread, CASCADE) # can be null if not in a thread
+    thread  = ForeignKey(Thread, CASCADE, null=False)
     message = CharField(max_length=256, null=False)
-    who     = ForeignKey(User, CASCADE, null=False)
+    who     = ForeignKey(User, SET_NULL, null=True)
     when    = DateTimeField(null=False)
 
 class Compliment(Model):
-    sender  = ForeignKey(User, CASCADE, related_name="ComplimentSender", null=True)
+    sender  = ForeignKey(User, SET_NULL, related_name="ComplimentSender", null=True)
     to      = ForeignKey(User, CASCADE, related_name="ComplimentTo", null=True)
     message = ForeignKey(Message, CASCADE)
 
@@ -26,7 +26,7 @@ class Complaint(Model):
         ('p', 'pending'),
         ('i', 'invalid')
     ]
-    sender  = ForeignKey(User, CASCADE, related_name="ComplaintSender", null=True)
+    sender  = ForeignKey(User, SET_NULL, related_name="ComplaintSender", null=True)
     to      = ForeignKey(User, CASCADE, related_name="ComplaintTo", null=True)
     message = ForeignKey(Message, CASCADE)
     status  = CharField(max_length=1, choices=STATUS, default='pending')

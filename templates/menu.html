@@ -96,7 +96,7 @@
                     </div>
                     
                     <!-- Quantity Controls (only for logged-in customers) -->
-                    {% if user.is_authenticated and user.is_customer %}
+                    {% if user.is_authenticated and user.type == 'CU' %}
                     <div class="quantity-controls">
                         <button class="quantity-btn minus" data-dish-id="{{ dish.id }}">-</button>
                         <input type="number" class="form-control quantity-input" id="quantity-{{ dish.id }}" value="0" min="0" readonly>
@@ -104,8 +104,8 @@
                     </div>
                     {% endif %}
                     
-                    <!-- Rate This Dish (only for logged-in customers who have ordered this dish) -->
-                    {% if user.is_authenticated and user.is_customer and dish.can_rate %}
+                    <!-- Rate This Dish (only for logged-in customers) -->
+                    {% if user.is_authenticated and user.type == 'CU' and dish.can_rate %}
                     <div class="mt-2">
                         <small>Rate this dish:</small>
                         <div class="rating-input" data-dish-id="{{ dish.id }}">
@@ -123,7 +123,7 @@
 </div>
 
 <!-- Checkout Button (only for customers with items in cart) -->
-{% if user.is_authenticated and user.is_customer %}
+{% if user.is_authenticated and user.type == 'CU' %}
 <button id="checkoutBtn" class="btn btn-primary checkout-btn d-none">
     <i class="bi bi-cart-check"></i> CHECKOUT
 </button>
@@ -271,6 +271,11 @@ $(document).ready(function() {
                 window.location.href = "{% url 'cart' %}";
             },
             error: function(xhr) {
+                // If not authorized, send the user to login
+                if (xhr.status === 403) {
+                    window.location.href = "{% url 'login' %}";
+                    return;
+                }
                 // Re-enable button
                 $btn.prop('disabled', false).html('<i class="bi bi-cart-check"></i> CHECKOUT');
                 

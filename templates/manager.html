@@ -70,6 +70,51 @@
     </div>
     {% endif %}
 
+    <div class="card mb-3 mt-4">
+      <div class="card-header">
+        <h5 class="mb-0">Suspension Pleas{% if pleas %} ({{ pleas|length }}){% endif %}</h5>
+      </div>
+      <div class="card-body">
+        {% if pleas %}
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>User</th>
+                <th>Submitted</th>
+                <th>Message</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for plea in pleas %}
+              <tr>
+                <td><strong>{{ plea.sender.username }}</strong></td>
+                <td><small>{{ plea.created_at|date:"M d, Y H:i" }}</small></td>
+                <td style="max-width: 320px; white-space: pre-wrap;">{{ plea.text }}</td>
+                <td>
+                  <form method="post" action="{% url 'plea_forgive' plea.id %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-success mb-1">Forgive &amp; Reactivate</button>
+                  </form>
+                  <form method="post" action="{% url 'plea_kick' plea.id %}" style="display:inline;" class="ms-1">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Kick Out</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-0" role="alert">
+          There are currently no suspension pleas from customers.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
   </div>
 
   <div class="col-md-4">

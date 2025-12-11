@@ -9,6 +9,9 @@ class Command(BaseCommand):
     help = 'Populate database with initial data'
 
     def handle(self, *args, **options):
+
+        shell_run(['python', 'manage.py', 'migrate'])
+        shell_run(['python', 'manage.py', 'makemigrations', 'air'])
         CHEFS = [
             ('Mordecai Shafier', 'moko1234'),
             ('Abraham Spoerri', 'raphaelsbrother')
@@ -34,7 +37,7 @@ class Command(BaseCommand):
 
         raphael_login = User.objects.create_user(
             username='raphael',
-            email='raphael@example.com',
+            email='coolrustacean@gmail.com',
             password='!@#$%^&*',
         )
         raphael_login.type = 'MN'
@@ -95,6 +98,3 @@ class Command(BaseCommand):
             dish.save()
             self.stdout.write(self.style.SUCCESS(f'✓ Created Dish: {dish_name} by {chef_name}'))
         self.stdout.write(self.style.SUCCESS('Database populated successfully!'))
-
-        shell_run(['python', 'manage.py', 'migrate'])
-        shell_run(['python', 'manage.py', 'makemigrations', 'air'])
