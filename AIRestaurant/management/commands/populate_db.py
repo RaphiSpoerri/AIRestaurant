@@ -4,6 +4,7 @@ from AIRestaurant.data.manager import Manager
 from AIRestaurant.data.chef import Chef, Product
 from AIRestaurant.data.deliverer import Deliverer
 from AIRestaurant.data.customer import Customer
+from AIRestaurant.data.faq import FAQEntry
 from subprocess import run as shell_run
 class Command(BaseCommand):
 
@@ -38,6 +39,11 @@ class Command(BaseCommand):
             ('AI Restaurant Mug', 'ai-restaurant-mug.png', 2999),
         ]
 
+        FAQ = [
+            ('How to place an order?', 'To place an order, add items to your cart and proceed to checkout.', 'karensmith'),
+            ('Is this a real restaurant?', 'No, this is a fictional restaurant created for educational purposes.', 'johndoe')
+        ]
+
         # Clear existing data
         for model in [
             Manager,
@@ -46,6 +52,7 @@ class Command(BaseCommand):
             Customer,
             User,
             Product,
+            FAQEntry,
         ]:
             model.objects.all().delete()
 
@@ -124,6 +131,15 @@ class Command(BaseCommand):
             )
             product.save()
             self.stdout.write(self.style.SUCCESS(f'✓ Created Merch Product: {merch_name}'))
+        for question, answer, asker_username in FAQ:
+            asker_user = User.objects.get(username=asker_username)
+            faq_entry = FAQEntry.objects.create(
+                question=question,
+                answer=answer,
+                author=asker_user,
+            )
+            faq_entry.save()
+            self.stdout.write(self.style.SUCCESS(f'✓ Created FAQ entry: {question}'))
         self.stdout.write(self.style.SUCCESS('Database populated successfully!'))
 
         shell_run(['python', 'manage.py', 'migrate'])

@@ -33,6 +33,33 @@
         padding: 80px 0;
         margin: 60px 0;
     }
+    .cookie-privacy-banner {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: auto;
+        z-index: 1080;
+        pointer-events: none;
+    }
+    .cookie-privacy-banner .card {
+        max-width: 480px;
+        margin: 0 0 1.5rem 1.5rem;
+        pointer-events: auto;
+    }
+    .cookie-privacy-banner .card-body {
+        position: relative;
+    }
+    .cookie-privacy-close {
+        position: absolute;
+        top: 0.35rem;
+        right: 0.35rem;
+    }
+    .cookie-privacy-img {
+        max-width: 80px;
+    }
+    .cookie-privacy-banner .card-title {
+        text-align: left;
+    }
 </style>
 {% endblock %}
 
@@ -153,6 +180,30 @@
             </div>
         </div>
     </div>
+</div>
 
+{% if not user.is_authenticated %}
+<!-- Cookie Privacy Policy (sticky) -->
+<div class="cookie-privacy-banner" id="cookie-privacy-banner">
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <button type="button" class="btn-close cookie-privacy-close" aria-label="Close" onclick="document.getElementById('cookie-privacy-banner').style.display='none';"></button>
+            <div class="d-flex align-items-center">
+                <div class="cookie-privacy-images d-flex flex-column align-items-start me-3">
+                    <img src="{% static 'admin/img/cookie_monster.jpg' %}" alt="Cookie Monster" class="img-fluid rounded-start cookie-privacy-img mb-1" style="max-width: 70px;">
+                    <img src="{% static 'admin/img/cookies.jpg' %}" alt="Cookies" class="img-fluid cookie-privacy-img">
+                </div>
+                <div class="flex-grow-1">
+                    <h4 class="card-title mb-2">Privacy Policy</h4>
+                    <p class="card-text mb-2">This site uses web cookies to make tasty cookies and other delicious dishes.</p>
+                    <div class="d-flex justify-content-end mt-2">
+                        <button type="button" class="btn btn-sm btn-primary" onclick="document.getElementById('cookie-privacy-banner').style.display='none';">Accept</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
