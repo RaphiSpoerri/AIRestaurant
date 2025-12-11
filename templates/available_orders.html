@@ -38,7 +38,7 @@
                 <td>${{ order.total_amount|floatformat:2 }}</td>
                 <td>{{ order.delivery_address|default:"N/A" }}</td>
                 <td>
-                    <span class="badge bg-{% if order.status == 'Ready' %}success{% else %}warning{% endif %}">
+                    <span class="badge bg-{% if order.status == 'pending' %}info{% elif order.status == 'on its way' %}warning{% else %}success{% endif %}">
                         {{ order.status }}
                     </span>
                 </td>

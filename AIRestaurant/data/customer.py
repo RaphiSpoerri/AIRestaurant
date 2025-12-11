@@ -2,7 +2,7 @@
 from django.db.models import *
 from typing import *
 from .users import User, Employee
-from .deliverer import OrderedDish
+
 from .chef import Product
 
 class Customer(Model):
@@ -49,6 +49,7 @@ class Customer(Model):
         Raises ValueError if balance is insufficient or the order is invalid.
         """
         from .deliverer import Order  # local import to avoid cycles
+        from .message import Complaint
 
         if order_type not in ("food", "merch"):
             raise ValueError("order_type must be 'food' or 'merch'.")
@@ -63,6 +64,13 @@ class Customer(Model):
             if od.quantity <= 0:
                 continue
             total_cost += od.total_cost()
+
+        # Apply VIP discount: 5% off the order total for VIP customers.
+        # This affects how much is charged, but not the underlying
+        # line-item prices stored on the order.
+        if self.vip and total_cost > 0:
+            discount = (total_cost * 5) // 100
+            total_cost -= discount
 
         if total_cost <= 0:
             raise ValueError("Order total must be positive.")
@@ -81,6 +89,32 @@ class Customer(Model):
         # Charge the customer
         self.balance -= total_cost
         self.save()
+
+        # VIP upgrade logic:
+        # After each successful order, if this customer either
+        #   - has made at least 3 purchases total, or
+        #   - has spent at least $100 (10_000 cents) in total,
+        # and there are no valid complaints about them, they
+        # become VIP.
+        if not self.vip:
+            has_valid_complaints = Complaint.objects.filter(
+                to=self.login,
+                status='v',
+            ).exists()
+
+            if not has_valid_complaints:
+                # Consider all orders for this customer.
+                orders_qs = Order.objects.filter(customer=self)
+                order_count = orders_qs.count()
+
+                total_spent_cents = 0
+                for o in orders_qs.prefetch_related('items__product'):
+                    for item in o.items.all():
+                        total_spent_cents += item.total_cost()
+
+                if order_count >= 3 or total_spent_cents >= 10000:
+                    self.vip = True
+                    self.save(update_fields=['vip'])
 
         return order
 

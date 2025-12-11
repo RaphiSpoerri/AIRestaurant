@@ -35,23 +35,37 @@ class Employee(Model):
     ], default="OK")
 
     def average_rating(self):
-        """Calculate average dish rating for this employee (typically a Chef).
+        """Return this employee's average rating.
 
-        Returns the average of all ratings on dishes created by this employee,
-        or None if no ratings exist.
+        - For chefs (user type 'CH'): average rating of all FOOD dishes
+          they created (existing behavior).
+        - For deliverers (user type 'DL'): average rating of all orders
+          assigned to them (using `Order.rating`).
+
+        Returns a float or None if no ratings exist.
         """
         from django.db.models import Avg
         from .chef import Product, ProductRating
+        from .deliverer import Order
 
-        # Get average rating over FOOD products created by this employee.
-        # Merch products (type='merch') are excluded so their ratings
-        # do not affect staff reputation.
-        avg_rating = ProductRating.objects.filter(
-            product__type="food",
-            product__creator__login=self.login,
-        ).aggregate(avg=Avg("rating"))["avg"]
+        user_type = self.login.type
 
-        return avg_rating
+        # Chef: average rating over FOOD products they created.
+        if user_type == 'CH':
+            return ProductRating.objects.filter(
+                product__type="food",
+                product__creator__login=self.login,
+            ).aggregate(avg=Avg("rating"))["avg"]
+
+        # Deliverer: average rating over orders assigned to them.
+        if user_type == 'DL':
+            return Order.objects.filter(
+                assigned_deliverer=self.login,
+                rating__isnull=False,
+            ).aggregate(avg=Avg("rating"))["avg"]
+
+        # Other employee types currently do not have a rating definition.
+        return None
 
 
     def score(self):

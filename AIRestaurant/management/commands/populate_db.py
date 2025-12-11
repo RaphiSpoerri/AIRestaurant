@@ -33,9 +33,9 @@ class Command(BaseCommand):
         ]
 
         MERCH = [
-            ('AI Restaurant T-Shirt', '?', 1999),
-            ('AI Restaurant Mug', '?', 1299),
-            ("Chef's Apron", '?', 2499),
+            ('AI Restaurant 3D Printed Chef Keychain', 'chef-keychain.jpg', 99),
+            ('AI Restaurant T-Shirt', 'ai-restaurant-shirt.png', 1999),
+            ('AI Restaurant Mug', 'ai-restaurant-mug.png', 2999),
         ]
 
         # Clear existing data

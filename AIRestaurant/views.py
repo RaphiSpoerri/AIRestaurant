@@ -138,10 +138,45 @@ def rate_dish(request, dish_id):
 
         # Recompute aggregate rating info to return to the client if needed
         agg = ProductRating.objects.filter(product=dish).aggregate(avg=Avg('rating'), count=Count('id'))
+        avg_rating = agg['avg'] or 0
+
+        # If this dish belongs to a chef, adjust their employment
+        # status based on the aggregate rating, using the same
+        # semantics as the complaint-based reputation system.
+        chef = dish.creator
+        if chef is not None and getattr(chef.login, 'type', None) == 'CH':
+            # Low average rating (<= 2): demotion, then firing on repeat.
+            if avg_rating <= 2:
+                # If already demoted once for low ratings, a subsequent low
+                # rating event fires the chef using the same helper used
+                # for score-based firing.
+                if chef.status in 'WR':
+                    chef.suspend_for_firing()
+                # If not yet fired or demoted for ratings, demote now.
+                elif chef.status != 'FD':
+                    chef.status = 'DM'
+                    chef.salary -= chef.demotion
+                    chef.save(update_fields=["status", "salary"])
+            
+            # High average rating (>= 4): remove demotion or promote if
+            # not already promoted or fired.
+            elif avg_rating >= 4 and chef.status not in ('PR', 'FD'):
+                if chef.status == 'DM':
+                    # Remove demotion but keep them on notice
+                    # (OK -> Demoted -> Warned flow).
+                    chef.status = 'WR'
+                    chef.salary += chef.demotion
+                    chef.save(update_fields=["status", "salary"])
+                elif chef.status == 'OK':
+                    # Promote and award bonus.
+                    chef.status = 'PR'
+                    chef.salary += chef.bonus
+                    chef.save(update_fields=["status", "salary"])
+
         return JsonResponse({
             'status': 'ok',
             'dish_id': dish.id,
-            'average_rating': agg['avg'] or 0,
+            'average_rating': avg_rating,
             'rating_count': agg['count'] or 0,
         })
     except Exception as e:
@@ -253,7 +288,15 @@ def place_order(request):
         messages.error(request, 'You cannot place a mixed food and merch order. Please separate them into different orders.')
         return redirect('cart')
 
-    if customer.balance < total_cents:
+    # Apply VIP discount (5%) for balance checks and display. The
+    # actual charge will be computed again inside Customer.order
+    # using the same rule so values stay consistent.
+    effective_total_cents = total_cents
+    if customer.vip and total_cents > 0:
+        vip_discount_cents = (total_cents * 5) // 100
+        effective_total_cents = total_cents - vip_discount_cents
+
+    if customer.balance < effective_total_cents:
         # Not enough balance: add a warning
         customer.add_warning()
 
@@ -281,15 +324,89 @@ def place_order(request):
     request.session['cart'] = {}
     request.session.modified = True
 
-    messages.success(request, f'Order placed successfully for ${total_cents / 100:.2f}.')
+    messages.success(request, f'Order placed successfully for ${effective_total_cents / 100:.2f}.')
     return redirect('order_history')
 
 
 def rate_chef(request, order_id):
-    if request.method == 'POST':
-        # handle rating submission
+    """Record a 1-5 star rating for a completed order.
+
+    This view is now used from the order history table as an
+    inline rating endpoint rather than a separate page.
+    """
+    if request.method != 'POST':
         return redirect('order_history')
-    return render(request, 'rate_chef.html', {'order_id': order_id})
+
+    if not request.user.is_authenticated or getattr(request.user, 'type', None) != 'CU':
+        messages.error(request, 'Only customers can rate their orders.')
+        return redirect('login')
+
+    order = get_object_or_404(Order, pk=order_id)
+
+    # Ensure this order belongs to the logged-in customer
+    customer = Customer.objects.filter(login=request.user).first()
+    if customer is None or order.customer_id != customer.id:
+        messages.error(request, 'You can only rate your own orders.')
+        return redirect('order_history')
+
+    raw = (request.POST.get('rating') or '').strip()
+    try:
+        val = int(raw)
+    except ValueError:
+        messages.error(request, 'Please choose a valid rating between 1 and 5.')
+        return redirect('order_history')
+
+    if val < 1 or val > 5:
+        messages.error(request, 'Rating must be between 1 and 5 stars.')
+        return redirect('order_history')
+
+    order.rating = val
+    order.save(update_fields=['rating'])
+
+    # If this order has an assigned deliverer, update their
+    # employment status based on the average rating across all
+    # their delivered orders, mirroring the chef rating logic.
+    if order.assigned_deliverer is not None:
+        try:
+            deliverer = Deliverer.objects.get(login=order.assigned_deliverer)
+        except Deliverer.DoesNotExist:
+            deliverer = None
+
+        if deliverer is not None and getattr(deliverer.login, 'type', None) == 'DL':
+            from django.db.models import Avg as _Avg
+
+            agg = Order.objects.filter(
+                assigned_deliverer=order.assigned_deliverer,
+                rating__isnull=False,
+            ).aggregate(avg=_Avg('rating'))
+            avg_rating = agg['avg'] or 0
+
+            # Low average rating (<= 2): demotion, then firing on repeat
+            # following OK -> Demoted -> Warned -> Fired.
+            if avg_rating <= 2:
+                if deliverer.status in ('DM', 'WR'):
+                    deliverer.suspend_for_firing()
+                elif deliverer.status != 'FD':
+                    deliverer.status = 'DM'
+                    deliverer.salary -= deliverer.demotion
+                    deliverer.save(update_fields=["status", "salary"])
+
+            # High average rating (>= 4): remove demotion or promote if
+            # not already promoted or fired.
+            elif avg_rating >= 4 and deliverer.status not in ('PR', 'FD'):
+                if deliverer.status == 'DM':
+                    # Remove demotion but keep them on notice
+                    # (OK -> Demoted -> Warned flow).
+                    deliverer.status = 'WR'
+                    deliverer.salary += deliverer.demotion
+                    deliverer.save(update_fields=["status", "salary"])
+                elif deliverer.status == 'OK':
+                    deliverer.status = 'PR'
+                    deliverer.salary += deliverer.bonus
+                    deliverer.save(update_fields=["status", "salary"])
+
+    messages.success(request, f'Thank you for rating this order {val} star(s).')
+    return redirect('order_history')
 
 
 def suspended_notice(request):
@@ -461,59 +578,6 @@ def plea_forgive(request, plea_id):
     return redirect('profile', user_id=viewer.id)
 
 
-def file_complaint(request):
-    """File a complaint using the shared _complaint_form partial.
-
-    - From order history: /file_complaint/?order_id=<id>
-    - From profile pages: the partial is embedded directly there.
-    """
-    if not request.user.is_authenticated:
-        messages.error(request, 'Please log in to file a complaint.')
-        return redirect('login')
-
-    target = None
-    order_id = request.GET.get('order_id')
-    if order_id:
-        try:
-            order = Order.objects.get(pk=int(order_id))
-        except (Order.DoesNotExist, ValueError, TypeError):
-            order = None
-        if order:
-            # Simple policy: complaints about orders go to the manager
-            mgr = Manager.objects.first()
-            target = getattr(mgr, 'login', None)
-
-    return render(request, 'file_complaint.html', {
-        'target': target,
-    })
-
-
-def file_compliment(request):
-    """Send a compliment using the shared _compliment_form partial.
-
-    - From order history: /file_compliment/?order_id=<id>
-    - From profile pages: the partial is embedded directly there.
-    """
-    if not request.user.is_authenticated:
-        messages.error(request, 'Please log in to send a compliment.')
-        return redirect('login')
-
-    target = None
-    order_id = request.GET.get('order_id')
-    if order_id:
-        try:
-            order = Order.objects.get(pk=int(order_id))
-        except (Order.DoesNotExist, ValueError, TypeError):
-            order = None
-        if order:
-            mgr = Manager.objects.first()
-            target = getattr(mgr, 'login', None)
-        
-    return render(request, 'file_compliment.html', {
-        'target': target,
-    })
-
-
 def assign_order(request, order_id):
     """Manager view to review bids for an order and assign it.
 
@@ -551,23 +615,61 @@ def assign_order(request, order_id):
             b.bid_amount = b.price_cents / 100.0
 
     if request.method == 'POST':
-        # Placeholder: in the future, we can persist the chosen deliverer
         delivery_person_id = request.POST.get('delivery_person_id')
         if not delivery_person_id:
             messages.error(request, 'Please choose a delivery person to assign this order.')
             return render(request, 'assign_order.html', {'order': order, 'bids': bids})
 
-        messages.success(request, 'Order assignment choice recorded (implementation pending).')
+        # Assign the order to the chosen deliverer user
+        chosen = DataUser.objects.filter(id=delivery_person_id, type='DL').first()
+        if chosen is None:
+            messages.error(request, 'Selected deliverer is invalid.')
+            return render(request, 'assign_order.html', {'order': order, 'bids': bids})
+
+        order.assigned_deliverer = chosen
+        # Manager assignment moves order from 'pending' to 'on its way'
+        order.status = 'on its way'
+        order.save(update_fields=['assigned_deliverer', 'status'])
+
+        messages.success(request, f'Order #{order.id} has been assigned to {chosen.username}.')
         return redirect('manager')
 
     return render(request, 'assign_order.html', {'order': order, 'bids': bids})
 
 
 def update_order_status(request, order_id):
-    if request.method == 'POST':
-        # update status logic
-        return redirect('order_history')
-    return redirect('order_history')
+    """Allow the assigned deliverer to update an order's status.
+
+    Currently used from the "My Deliveries" page to mark orders
+    as delivered, which also updates what the customer sees in
+    their order history.
+    """
+    if request.method != 'POST':
+        return redirect('index')
+
+    if not request.user.is_authenticated or getattr(request.user, 'type', None) != 'DL':
+        messages.error(request, 'Only deliverers can update delivery status.')
+        return redirect('login')
+
+    order = get_object_or_404(Order, pk=order_id)
+
+    # Ensure this deliverer is actually assigned to the order
+    if getattr(order, 'assigned_deliverer_id', None) != request.user.id:
+        messages.error(request, 'You are not assigned to this order.')
+        return redirect('my_deliveries')
+
+    new_status = (request.POST.get('status') or '').strip() or 'delivered'
+
+    # For now we only support marking as delivered
+    if new_status.lower() not in ['delivered']:
+        messages.error(request, 'Unsupported status update.')
+        return redirect('my_deliveries')
+
+    order.status = 'delivered'
+    order.save(update_fields=['status'])
+
+    messages.success(request, f'Order #{order.id} has been marked as delivered.')
+    return redirect('my_deliveries')
 def order_history(request):
     """Show the current customer's past orders with items and totals."""
     if not request.user.is_authenticated or getattr(request.user, 'type', None) != 'CU':
@@ -707,6 +809,8 @@ def cart(request):
             'customer': customer,
             'cart_type': None,
             'cart_mixed': False,
+            'vip_discount_cents': 0,
+            'vip_total_cents': 0,
         })
 
     dish_ids = [int(did) for did in session_cart.keys()]
@@ -742,12 +846,21 @@ def cart(request):
             'subtotal': subtotal_cents,
         }
 
+    # Compute VIP discount preview for the cart.
+    vip_discount_cents = 0
+    vip_total_cents = total_cents
+    if getattr(customer, 'vip', False) and total_cents > 0:
+        vip_discount_cents = (total_cents * 5) // 100
+        vip_total_cents = total_cents - vip_discount_cents
+
     return render(request, 'cart.html', {
         'cart': cart_items,
         'total': total_cents,
         'customer': customer,
         'cart_type': cart_type,
         'cart_mixed': cart_mixed,
+        'vip_discount_cents': vip_discount_cents,
+        'vip_total_cents': vip_total_cents,
     })
 
 def chef(request):
@@ -774,7 +887,7 @@ def available_orders(request):
 
     orders_qs = (
         Order.objects
-        .filter(status='pending')
+        .filter(status='pending', assigned_deliverer__isnull=True)
         .select_related('customer__login')
         .prefetch_related('items__product')
         .order_by('-date')
@@ -884,6 +997,39 @@ def deliverer(request):
         return redirect('profile', user_id=request.user.id)
     return render(request, 'deliverer.html')
 
+
+def my_deliveries(request):
+    """List orders assigned to the current deliverer.
+
+    Shows only orders where assigned_deliverer is this user.
+    """
+    if not request.user.is_authenticated or getattr(request.user, 'type', None) != 'DL':
+        messages.error(request, 'Please log in as a deliverer to view your deliveries.')
+        return redirect('login')
+
+    orders_qs = (
+        Order.objects
+        .filter(assigned_deliverer=request.user)
+        .select_related('customer__login')
+        .prefetch_related('items__product')
+        .order_by('-date')
+    )
+
+    orders = []
+    for order in orders_qs:
+        total_cents = 0
+        for item in order.items.all():
+            try:
+                total_cents += item.total_cost()
+            except Exception:
+                if getattr(item, 'product', None) is not None and item.quantity:
+                    total_cents += item.product.price * item.quantity
+        order.total_amount = total_cents / 100.0
+        order.timestamp = order.date
+        orders.append(order)
+
+    return render(request, 'my_deliveries.html', {'orders': orders})
+
 def manager(request):
     """Redirect to current user's manager profile if authenticated."""
     if request.user.is_authenticated:
@@ -924,8 +1070,9 @@ def customer(request, profile: str = None):
     return profile_view(request, user.id)
 
 def ai_chat(request):
+    # API-style endpoint used by FAQ page; POST only.
     if request.method != 'POST':
-        return render(request, 'ai_chat.html')
+        return JsonResponse({"error": "Method not allowed"}, status=405)
     if "testing":
         question = unquote(request.POST.get('query'))
         result = shell(
@@ -983,6 +1130,12 @@ def profile_view(request, user_id):
     # load profile model instance if present
     if target.type == 'CU':
         context['profile'] = Customer.objects.filter(login=target).first()
+        # Pre-format customer balance (stored in cents) as d*.cc
+        if context['profile'] is not None:
+            bal = context['profile'].balance or 0
+            dollars = bal // 100
+            cents = bal % 100
+            context['customer_balance_str'] = f"{dollars}.{cents:02d}"
     elif target.type == 'CH':
         context['profile'] = Chef.objects.filter(login=target).first()
     elif target.type == 'DL':

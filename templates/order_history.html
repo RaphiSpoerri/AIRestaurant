@@ -1,4 +1,4 @@
-{% extends "./base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Order History - AI Restaurant{% endblock %}
 
@@ -25,21 +25,43 @@
                 <td>{{ order.timestamp|date:"Y-m-d H:i" }}</td>
                 <td>
                     {% for item in order.items.all %}
-                    {{ item.menu_item.name }} (x{{ item.quantity }})<br>
+                    {{ item.product.name }} (x{{ item.quantity }})<br>
                     {% endfor %}
                 </td>
                 <td>${{ order.total_amount|floatformat:2 }}</td>
                 <td>
-                    <span class="badge bg-{% if order.status == 'Delivered' %}success{% elif order.status == 'Preparing' %}warning{% else %}info{% endif %}">
+                    <span class="badge bg-{% if order.status == 'delivered' %}success{% elif order.status == 'on its way' %}warning{% else %}info{% endif %}">
                         {{ order.status }}
                     </span>
                 </td>
                 <td>
-                    {% if order.status == 'Delivered' %}
-                        <a href="{% url 'rate_chef' order.id %}" class="btn btn-sm btn-primary">Rate Chef</a>
+                    {% if order.assigned_deliverer %}
+                        <div class="mb-2">
+                            Deliverer:
+                            <a href="{% url 'profile' order.assigned_deliverer.id %}">
+                                {{ order.assigned_deliverer.username }}
+                            </a>
+                        </div>
                     {% endif %}
-                    <a href="{% url 'file_complaint' %}?order_id={{ order.id }}" class="btn btn-sm btn-outline-warning">Complain</a>
-                    <a href="{% url 'file_compliment' %}?order_id={{ order.id }}" class="btn btn-sm btn-outline-success">Compliment</a>
+
+                    {% if order.status == 'delivered' %}
+                        <form method="post" action="{% url 'rate_chef' order.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <label for="rating-{{ order.id }}" class="form-label me-1 mb-0">Rate:</label>
+                            <select name="rating" id="rating-{{ order.id }}" class="form-select form-select-sm d-inline-block w-auto me-1">
+                                <option value="">-</option>
+                                {% for n in "12345" %}
+                                    <option value="{{ forloop.counter }}" {% if order.rating == forloop.counter %}selected{% endif %}>
+                                        {{ forloop.counter }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-primary">Submit</button>
+                        </form>
+                        {% if order.rating %}
+                            <div><small class="text-muted">Current rating: {{ order.rating }}/5</small></div>
+                        {% endif %}
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}

@@ -26,6 +26,8 @@ class Order(Model):
         choices=[("food", "Food"), ("merch", "Merch")],
         default="food",
     )
+    # Optional 1-5 rating left by the customer for this order
+    rating = PositiveSmallIntegerField(null=True, blank=True)
 
 
 class OrderedDish(Model):
@@ -42,17 +44,17 @@ class Deliverer(Employee):
 
 
 class Bid(Model):
-        """A deliverer's bid (or abstention) for delivering a specific order.
+    """A deliverer's bid (or abstention) for delivering a specific order.
 
-        - Each Bid links a deliverer (via their User record) to an Order.
-        - `price_cents` stores the bid amount in cents; it may be null to
-            indicate the deliverer is abstaining from bidding.
-        """
+    - Each Bid links a deliverer (via their User record) to an Order.
+    - `price_cents` stores the bid amount in cents; it may be null to
+      indicate the deliverer is abstaining from bidding.
+    """
 
-        order = ForeignKey(Order, CASCADE, related_name="bids")
-        deliverer = ForeignKey(User, CASCADE, related_name="delivery_bids")
-        price_cents = IntegerField(null=True, blank=True)
-        created_at = DateTimeField(auto_now_add=True)
+    order = ForeignKey(Order, CASCADE, related_name="bids")
+    deliverer = ForeignKey(User, CASCADE, related_name="delivery_bids")
+    price_cents = IntegerField(null=True, blank=True)
+    created_at = DateTimeField(auto_now_add=True)
 
-        class Meta:
-                unique_together = ("order", "deliverer")
+    class Meta:
+        unique_together = ("order", "deliverer")

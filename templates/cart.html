@@ -39,12 +39,27 @@
             <th>{{ total|format_cents_as_money }}</th>
             <th></th>
         </tr>
+        {% if customer.vip and total > 0 %}
+        <tr>
+            <th colspan="3">VIP 5% Discount:</th>
+            <th>-{{ vip_discount_cents|format_cents_as_money }}</th>
+            <th></th>
+        </tr>
+        <tr>
+            <th colspan="3">Total after VIP Discount:</th>
+            <th>{{ vip_total_cents|format_cents_as_money }}</th>
+            <th></th>
+        </tr>
+        {% endif %}
     </tfoot>
 </table>
 
 <div class="card mb-3">
     <div class="card-body">
         <p><strong>Current Balance:</strong> {{ customer.balance|format_cents_as_money }}</p>
+        {% if customer.vip %}
+          <p class="text-success mb-0"><strong>You have a 5% VIP discount on this order.</strong></p>
+        {% endif %}
     </div>
 </div>
 

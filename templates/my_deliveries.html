@@ -1,4 +1,4 @@
-{% extends "./base.html" %}
+{% extends "base.html" %}
 {% load tz %}
 
 {% block title %}My Deliveries - AI Restaurant{% endblock %}
@@ -25,26 +25,32 @@
             {% for order in orders %}
             <tr>
                 <td>#{{ order.id }}</td>
-                <td>{{ order.customer.username }}</td>
+                <td>
+                    {% if order.customer and order.customer.login %}
+                        {{ order.customer.login.username }}
+                    {% else %}
+                        <span class="text-muted">Unknown</span>
+                    {% endif %}
+                </td>
                 <td>
                     {% for item in order.items.all %}
-                    {{ item.menu_item.name }} (x{{ item.quantity }})<br>
+                    {{ item.product.name }} (x{{ item.quantity }})<br>
                     {% endfor %}
                 </td>
                 <td>${{ order.total_amount|floatformat:2 }}</td>
                 <td>{{ order.delivery_address|default:"N/A" }}</td>
                 <td>
-                    <span class="badge bg-{% if order.status == 'Delivered' %}success{% else %}warning{% endif %}">
+                    <span class="badge bg-{% if order.status == 'delivered' %}success{% elif order.status == 'on its way' %}warning{% else %}secondary{% endif %}">
                         {{ order.status }}
                     </span>
                 </td>
                 <td>{{ order.timestamp|localtime }}</td>
                 <td>
-                    {% if order.status == 'Out for Delivery' %}
+                    {% if order.status == 'on its way' %}
                     <form method="POST" action="{% url 'update_order_status' order.id %}" class="d-inline">
                         {% csrf_token %}
-                        <input type="hidden" name="status" value="Delivered">
-                        <button type="submit" class="btn btn-sm btn-success">Mark Delivered</button>
+                        <input type="hidden" name="status" value="delivered">
+                        <button type="submit" class="btn btn-sm btn-success">Mark as Delivered</button>
                     </form>
                     {% endif %}
                 </td>

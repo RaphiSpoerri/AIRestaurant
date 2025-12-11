@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    {% load static %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}AI Restaurant{% endblock %}</title>
+
+    <link rel="icon" href="{% static 'admin/img/chef-hat.png' %}" type="image/png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    {% load static %}
+
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
     <style>
         /* Ensure footer stays at the bottom even with little content */
@@ -14,6 +17,35 @@
         body { min-height: 100vh; display: flex; flex-direction: column; }
         main { flex: 1 0 auto; }
         footer { margin-top: auto; }
+
+        /* Cookie / privacy banner */
+        .cookie-privacy-banner {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: auto;
+            z-index: 1080;
+            pointer-events: none;
+        }
+        .cookie-privacy-banner .card {
+            max-width: 480px;
+            margin: 0 0 1.5rem 1.5rem;
+            pointer-events: auto;
+        }
+        .cookie-privacy-banner .card-body {
+            position: relative;
+        }
+        .cookie-privacy-close {
+            position: absolute;
+            top: 0.35rem;
+            right: 0.35rem;
+        }
+        .cookie-privacy-img {
+            max-width: 80px;
+        }
+        .cookie-privacy-banner .card-title {
+            text-align: left;
+        }
     </style>
     {% block extra_head %}{% endblock %}
     {% block extra_css %}{% endblock %}
@@ -31,9 +63,6 @@
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'menu' %}">Menu</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'ai_chat' %}">AI Chat</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'faq' %}">FAQ</a>
@@ -128,7 +157,69 @@
         </div>
     </footer>
 
+    {% if not user.is_authenticated %}
+    <!-- Cookie Privacy Policy (sticky, shown until dismissed) -->
+    <div class="cookie-privacy-banner" id="cookie-privacy-banner" style="display:none;">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <button type="button" class="btn-close cookie-privacy-close" aria-label="Close" id="cookie-privacy-close"></button>
+                <div class="d-flex align-items-center">
+                    <div class="cookie-privacy-images d-flex flex-column align-items-start me-3">
+                        <img src="{% static 'admin/img/cookie_monster.jpg' %}" alt="Cookie Monster" class="img-fluid rounded-start cookie-privacy-img mb-1" style="max-width: 70px;">
+                        <img src="{% static 'admin/img/cookies.jpg' %}" alt="Cookies" class="img-fluid cookie-privacy-img">
+                    </div>
+                    <div class="flex-grow-1">
+                        <h4 class="card-title mb-2">Privacy Policy</h4>
+                        <p class="card-text mb-2">This site uses web cookies to make tasty cookies and other delicious dishes.</p>
+                        <div class="d-flex justify-content-end mt-2">
+                            <button type="button" class="btn btn-sm btn-primary" id="cookie-privacy-accept">Accept</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        (function() {
+            function getCookie(name) {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return parts.pop().split(';').shift();
+                return null;
+            }
+
+            function setCookie(name, value, days) {
+                const d = new Date();
+                d.setTime(d.getTime() + (days*24*60*60*1000));
+                const expires = `expires=${d.toUTCString()}`;
+                document.cookie = `${name}=${value};${expires};path=/`;
+            }
+
+            document.addEventListener('DOMContentLoaded', function() {
+                var banner = document.getElementById('cookie-privacy-banner');
+                if (!banner) return;
+
+                if (!getCookie('air_cookie_banner_closed')) {
+                    banner.style.display = 'block';
+                }
+
+                function dismissBanner() {
+                    banner.style.display = 'none';
+                    setCookie('air_cookie_banner_closed', '1', 365);
+                }
+
+                var closeBtn = document.getElementById('cookie-privacy-close');
+                var acceptBtn = document.getElementById('cookie-privacy-accept');
+                if (closeBtn) closeBtn.addEventListener('click', dismissBanner);
+                if (acceptBtn) acceptBtn.addEventListener('click', dismissBanner);
+            });
+        })();
+    </script>
+
     {% block extra_js %}{% endblock %}
 
 </body>
