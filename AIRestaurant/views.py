@@ -45,7 +45,18 @@ def menu(request):
     Provides per-dish average rating and rating count, and exposes a
     simple `can_rate` flag used by the template for logged-in customers.
     """
-    dishes_qs = Product.objects.filter(type='food').annotate(
+    # Only VIP customers should see VIP-exclusive items.
+    is_vip_customer = (
+        request.user.is_authenticated
+        and getattr(request.user, 'type', None) == 'CU'
+        and getattr(request.user, 'is_vip', False)
+    )
+
+    base_qs = Product.objects.filter(type='food')
+    if not is_vip_customer:
+        base_qs = base_qs.filter(vip_exclusive=False)
+
+    dishes_qs = base_qs.annotate(
         avg_rating=Avg('productrating__rating'),
         rating_count=Count('productrating')
     )
@@ -80,7 +91,18 @@ def merch(request):
 
     Merch items are stored as `Product` rows tagged with type='merch'.
     """
-    products_qs = Product.objects.filter(type='merch').annotate(
+    # Only VIP customers should see VIP-exclusive merch.
+    is_vip_customer = (
+        request.user.is_authenticated
+        and getattr(request.user, 'type', None) == 'CU'
+        and getattr(request.user, 'is_vip', False)
+    )
+
+    base_qs = Product.objects.filter(type='merch')
+    if not is_vip_customer:
+        base_qs = base_qs.filter(vip_exclusive=False)
+
+    products_qs = base_qs.annotate(
         avg_rating=Avg('productrating__rating'),
         rating_count=Count('productrating'),
     )
@@ -266,6 +288,10 @@ def place_order(request):
         dish = dishes.get(int(dish_id_str))
         if not dish:
             continue
+        # Enforce VIP exclusivity at checkout in case cart contents were tampered with
+        if getattr(dish, 'vip_exclusive', False) and not getattr(customer, 'vip', False):
+            messages.error(request, f'"{dish.name}" is a VIP-exclusive item and cannot be ordered with your current account.')
+            return redirect('cart')
         p_type = getattr(dish, 'type', 'food')
         if order_type is None:
             order_type = p_type
@@ -1283,6 +1309,78 @@ def manage_menu(request):
     if not (is_manager or is_chef):
         messages.error(request, 'Only managers and chefs can manage the menu.')
         return redirect('index')
+
+    # Handle create/update actions
+    if request.method == 'POST':
+        action_add = request.POST.get('add')
+        action_update = request.POST.get('update')
+
+        name = (request.POST.get('name') or '').strip()
+        price_raw = (request.POST.get('price') or '').strip()
+        chef_id = (request.POST.get('chef') or '').strip() or None
+        vip_flag = bool(request.POST.get('vip_exclusive'))
+
+        if not name or not price_raw:
+            messages.error(request, 'Name and price are required.')
+            return redirect('manage_menu')
+
+        try:
+            price_cents = int(round(float(price_raw) * 100))
+            if price_cents < 0:
+                raise ValueError()
+        except ValueError:
+            messages.error(request, 'Please enter a valid non-negative price.')
+            return redirect('manage_menu')
+
+        chef_obj = None
+        if chef_id:
+            try:
+                chef_obj = Chef.objects.get(id=int(chef_id))
+            except (ValueError, Chef.DoesNotExist):
+                chef_obj = None
+
+        if action_add:
+            # Create a new food product
+            prod = Product(name=name, price=price_cents, type='food', vip_exclusive=vip_flag)
+            if chef_obj is not None:
+                prod.creator = chef_obj
+
+            # Optional: if an image file is uploaded, store its filename in img
+            image_file = request.FILES.get('image')
+            if image_file is not None and getattr(image_file, 'name', None):
+                prod.img = image_file.name
+
+            prod.save()
+            messages.success(request, f'Menu item "{prod.name}" added.')
+            return redirect('manage_menu')
+
+        if action_update:
+            menu_id = request.POST.get('menu_id')
+            if not menu_id:
+                messages.error(request, 'Missing menu item id for update.')
+                return redirect('manage_menu')
+            try:
+                prod = Product.objects.get(id=int(menu_id), type='food')
+            except (ValueError, Product.DoesNotExist):
+                messages.error(request, 'Menu item not found.')
+                return redirect('manage_menu')
+
+            prod.name = name
+            prod.price = price_cents
+            prod.creator = chef_obj
+            prod.vip_exclusive = vip_flag
+
+            image_file = request.FILES.get('image')
+            if image_file is not None and getattr(image_file, 'name', None):
+                prod.img = image_file.name
+
+            prod.save()
+            messages.success(request, f'Menu item "{prod.name}" updated.')
+            return redirect('manage_menu')
+
+        # Unknown POST action; just bounce back.
+        messages.error(request, 'Unknown action for menu management.')
+        return redirect('manage_menu')
 
     # For now we focus on listing all existing FOOD products.
     menu_items = list(

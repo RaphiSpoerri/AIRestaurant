@@ -95,6 +95,9 @@
                 {% endif %}
                 <div class="card-body">
                     <h5 class="card-title">{{ dish.name }}</h5>
+                    {% if dish.vip_exclusive %}
+                    <p><span class="badge bg-warning text-dark">VIP Exclusive</span></p>
+                    {% endif %}
                     {% if dish.creator and dish.creator.login %}
                     <p class="mb-1">
                         <small class="text-muted">By
@@ -103,7 +106,6 @@
                     </p>
                     {% endif %}
                     <p class="card-text">{{ dish.description }}</p>
-                    
                     <p class="h5 text-primary">{{ dish.price|format_cents_as_money }}</p>
                     
                     <!-- Dish Rating -->

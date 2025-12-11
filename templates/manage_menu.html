@@ -1,4 +1,5 @@
-{% extends "./base.html" %}
+{% extends "base.html" %}
+{% load static %}
 {% load filters %}
 {% block title %}Manage Menu - AI Restaurant{% endblock %}
 
@@ -13,25 +14,23 @@
 
 {% if menu_items %}
 <div class="table-responsive">
-    <table class="table table-striped">
+    <table class="table table-striped align-middle">
         <thead>
             <tr>
-                <th>Image</th>
+                <th style="width: 80px;">Image</th>
                 <th>Name</th>
-                <th>Description</th>
-                <th>Price</th>
-                <th>Category</th>
-                <th>Chef</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th style="width: 120px;">Price</th>
+                <th style="width: 120px;">VIP?</th>
+                <th style="width: 180px;">Chef</th>
+                <th style="width: 120px;">Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for item in menu_items %}
             <tr>
                 <td>
-                    {% if item.image %}
-                    <img src="{{ item.image.url }}" 
+                    {% if item.img %}
+                    <img src="{{ "../static/admin/img/"|add:item.img }}" 
                          alt="{{ item.name }}" style="width: 60px; height: 60px; object-fit: cover;">
                     {% else %}
                     <div class="bg-light d-flex align-items-center justify-content-center" 
@@ -41,15 +40,19 @@
                     {% endif %}
                 </td>
                 <td>{{ item.name }}</td>
-                <td>{{ item.description|default:"-" }}</td>
                 <td>{{ item.price|format_cents_as_money }}</td>
-                <td>{{ item.category|default:"-" }}</td>
-                <td>{{ item.creator.username|default:"Unassigned" }}</td>
                 <td>
-                    {% if item.is_available %}
-                        <span class="badge bg-success">Available</span>
+                    {% if item.vip_exclusive %}
+                        <span class="badge bg-warning text-dark">VIP Only</span>
                     {% else %}
-                        <span class="badge bg-secondary">Unavailable</span>
+                        <span class="text-muted">No</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if item.creator and item.creator.login %}
+                        <a href="{% url 'profile' item.creator.login.id %}">{{ item.creator.login.username }}</a>
+                    {% else %}
+                        <span class="text-muted">Unassigned</span>
                     {% endif %}
                 </td>
                 <td>
@@ -84,30 +87,26 @@
                         <input type="text" class="form-control" id="name" name="name" required>
                     </div>
                     <div class="mb-3">
-                        <label for="description" class="form-label">Description</label>
-                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
-                    </div>
-                    <div class="mb-3">
                         <label for="price" class="form-label">Price *</label>
                         <input type="number" step="0.01" min="0" class="form-control" id="price" name="price" required>
                     </div>
                     <div class="mb-3">
-                        <label for="category" class="form-label">Category</label>
-                        <input type="text" class="form-control" id="category" name="category" 
-                               placeholder="e.g., Pizza, Salad, Main Course">
-                    </div>
-                    <div class="mb-3">
                         <label for="chef" class="form-label">Chef</label>
-                        {{ form.chef }}
+                        <select class="form-select" id="chef" name="chef">
+                            <option value="">Unassigned</option>
+                            {% for chef in chefs %}
+                            <option value="{{ chef.id }}">{{ chef.login.username }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="mb-3">
-                        <label for="image" class="form-label">Image</label>
+                        <label for="image" class="form-label">Image (optional)</label>
                         <input type="file" class="form-control" id="image" name="image" accept="image/*">
-                        <small class="text-muted">Upload a JPEG, PNG, or GIF image</small>
+                        <small class="text-muted">Upload a JPEG, PNG, or GIF image; the filename will be used as the menu image.</small>
                     </div>
                     <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="is_available" name="is_available" checked>
-                        <label class="form-check-label" for="is_available">Available for order</label>
+                        <input type="checkbox" class="form-check-input" id="vip_exclusive" name="vip_exclusive">
+                        <label class="form-check-label" for="vip_exclusive">VIP-exclusive item (only VIP customers can see/order)</label>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -138,37 +137,29 @@
                         <input type="text" class="form-control" id="edit_name{{ item.id }}" name="name" value="{{ item.name }}" required>
                     </div>
                     <div class="mb-3">
-                        <label for="edit_description{{ item.id }}" class="form-label">Description</label>
-                        <textarea class="form-control" id="edit_description{{ item.id }}" name="description" rows="3">{{ item.description }}</textarea>
-                    </div>
-                    <div class="mb-3">
                         <label for="edit_price{{ item.id }}" class="form-label">Price *</label>
-                        <input type="number" step="0.01" min="0" class="form-control" id="edit_price{{ item.id }}" name="price" value="{{ item.price }}" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="edit_category{{ item.id }}" class="form-label">Category</label>
-                        <input type="text" class="form-control" id="edit_category{{ item.id }}" name="category" value="{{ item.category }}">
+                        <input type="number" step="0.01" min="0" class="form-control" id="edit_price{{ item.id }}" name="price" value="{{ item.price|floatformat:2 }}" required>
                     </div>
                     <div class="mb-3">
                         <label for="edit_chef{{ item.id }}" class="form-label">Chef</label>
                         <select class="form-select" id="edit_chef{{ item.id }}" name="chef">
                             <option value="">Unassigned</option>
                             {% for chef in chefs %}
-                            <option value="{{ chef.id }}" {% if item.chef_id == chef.id %}selected{% endif %}>{{ chef.username }}</option>
+                            <option value="{{ chef.id }}" {% if item.creator_id == chef.id %}selected{% endif %}>{{ chef.login.username }}</option>
                             {% endfor %}
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label for="edit_image{{ item.id }}" class="form-label">Image</label>
-                        {% if item.image %}
-                        <p><small>Current image: <a href="{{ item.image.url }}" target="_blank">View</a></small></p>
+                        <label for="edit_image{{ item.id }}" class="form-label">Image (optional)</label>
+                        {% if item.img %}
+                        <p><small>Current image: <a href="{{ "../static/admin/img/"|add:item.img }}" target="_blank">View</a></small></p>
                         {% endif %}
                         <input type="file" class="form-control" id="edit_image{{ item.id }}" name="image" accept="image/*">
                         <small class="text-muted">Leave empty to keep current image, or upload a new one</small>
                     </div>
                     <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="edit_is_available{{ item.id }}" name="is_available" {% if item.is_available %}checked{% endif %}>
-                        <label class="form-check-label" for="edit_is_available{{ item.id }}">Available for order</label>
+                        <input type="checkbox" class="form-check-input" id="edit_vip_exclusive{{ item.id }}" name="vip_exclusive" {% if item.vip_exclusive %}checked{% endif %}>
+                        <label class="form-check-label" for="edit_vip_exclusive{{ item.id }}">VIP-exclusive item (only VIP customers can see/order)</label>
                     </div>
                 </div>
                 <div class="modal-footer">

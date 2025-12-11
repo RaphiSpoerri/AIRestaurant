@@ -12,6 +12,8 @@ class Product(Model):
     name = CharField(max_length=50)
     img = CharField(max_length=256, default="?")
     price = PositiveIntegerField()
+    # When true, this item is only visible/orderable to VIP customers.
+    vip_exclusive = BooleanField(default=False)
     # Classify products so we can distinguish menu items from merch
     type = CharField(
         max_length=10,
