@@ -28,6 +28,13 @@
                     {% endif %}
                 </strong>
                 <small class="text-muted"> - {{ m.when|localtime }}</small>
+                {% if user.is_authenticated and user.type == 'MN' %}
+                    <form method="post" action="{% url 'delete_message' %}" style="display:inline;" class="ms-2" id="delete-form-{{ m.id }}">
+                        {% csrf_token %}
+                        <input type="hidden" name="message_id" value="{{ m.id }}">
+                        <span style="color: red; cursor: pointer; text-decoration: underline;" onclick="document.getElementById('delete-form-{{ m.id }}').submit();">Delete</span>
+                    </form>
+                {% endif %}
                 <div>{{ m.message }}</div>
             </div>
             <hr>

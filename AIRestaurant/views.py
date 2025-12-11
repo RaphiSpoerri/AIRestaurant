@@ -1470,6 +1470,87 @@ def thread_view(request, thread_id):
         'thread_messages': messages_qs,
     })
 
+@require_POST
+def delete_message(request):
+    """Manager action: delete a message from a thread."""
+    viewer = request.user
+    viewer_type = getattr(viewer, 'type', None)
+    is_manager = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
+
+    if not is_manager:
+        messages.error(request, 'Only managers can delete messages.')
+        return redirect('discussions')
+
+    message_id = request.POST.get('message_id')
+    if not message_id:
+        messages.error(request, 'Invalid request.')
+        return redirect('discussions')
+
+    try:
+        msg = Message.objects.get(id=int(message_id))
+    except (ValueError, Message.DoesNotExist):
+        messages.error(request, 'Message not found.')
+        return redirect('discussions')
+
+    thread_id = msg.thread.id
+    msg.delete()
+    messages.success(request, 'Message deleted.')
+    return redirect('thread', thread_id=thread_id)
+
+@require_POST
+def delete_thread(request):
+    """Manager action: delete a thread."""
+    viewer = request.user
+    viewer_type = getattr(viewer, 'type', None)
+    is_manager = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
+
+    if not is_manager:
+        messages.error(request, 'Only managers can delete threads.')
+        return redirect('discussions')
+
+    thread_id = request.POST.get('thread_id')
+    if not thread_id:
+        messages.error(request, 'Invalid request.')
+        return redirect('discussions')
+
+    try:
+        thread = Thread.objects.get(id=int(thread_id))
+    except (ValueError, Thread.DoesNotExist):
+        messages.error(request, 'Thread not found.')
+        return redirect('discussions')
+
+    thread.delete()
+    messages.success(request, 'Thread deleted.')
+    return redirect('discussions')
+
+@require_POST
+def edit_thread(request):
+    """Manager action: edit a thread title."""
+    viewer = request.user
+    viewer_type = getattr(viewer, 'type', None)
+    is_manager = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
+
+    if not is_manager:
+        messages.error(request, 'Only managers can edit threads.')
+        return redirect('discussions')
+
+    thread_id = request.POST.get('thread_id')
+    title = request.POST.get('title', '').strip()
+    if not thread_id or not title:
+        messages.error(request, 'Invalid request.')
+        return redirect('discussions')
+
+    try:
+        thread = Thread.objects.get(id=int(thread_id))
+    except (ValueError, Thread.DoesNotExist):
+        messages.error(request, 'Thread not found.')
+        return redirect('discussions')
+
+    thread.title = title
+    thread.save()
+    messages.success(request, 'Thread title updated.')
+    return redirect('discussions')
+
 
 def register(request):
     """Register a new user with pending approval status.

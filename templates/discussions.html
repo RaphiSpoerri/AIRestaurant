@@ -35,6 +35,16 @@
                 <div class="text-end">
                     <small class="d-block">{{ t.creation_date|localtime }}</small>
                     <small class="badge bg-secondary">{{ item.count }} msg{{ item.count|pluralize }}</small>
+                    {% if user.is_authenticated and user.type == 'MN' %}
+                        <div class="mt-1">
+                            <form method="post" action="{% url 'delete_thread' %}" style="display:inline;" class="me-1">
+                                {% csrf_token %}
+                                <input type="hidden" name="thread_id" value="{{ t.id }}">
+                                <span style="color: red; cursor: pointer; text-decoration: underline;" onclick="event.stopPropagation(); if(confirm('Delete this thread?')) event.target.closest('form').submit();">Delete</span>
+                            </form>
+                            <span style="color: blue; cursor: pointer; text-decoration: underline;" onclick="event.stopPropagation(); editThread({{ t.id }}, '{{ t.title|escapejs }}')">Edit</span>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
         </a>
@@ -49,6 +59,12 @@
     <input type="hidden" name="title" id="thread-title-input">
 </form>
 
+<form id="edit-thread-form" method="post" action="{% url 'edit_thread' %}" style="display:none;">
+    {% csrf_token %}
+    <input type="hidden" name="thread_id" id="edit-thread-id">
+    <input type="hidden" name="title" id="edit-thread-title">
+</form>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -59,5 +75,13 @@ document.getElementById('create-thread').addEventListener('click', function(){
     document.getElementById('thread-title-input').value = title;
     document.getElementById('create-thread-form').submit();
 });
+
+function editThread(threadId, currentTitle) {
+    const newTitle = prompt('Edit thread title:', currentTitle);
+    if (!newTitle || newTitle === currentTitle) return;
+    document.getElementById('edit-thread-id').value = threadId;
+    document.getElementById('edit-thread-title').value = newTitle;
+    document.getElementById('edit-thread-form').submit();
+}
 </script>
 {% endblock %}
