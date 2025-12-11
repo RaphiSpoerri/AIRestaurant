@@ -68,6 +68,20 @@
     <h1 class="text-center my-5">Products</h1>
     {% endblock %}
     
+    {% if not user.is_authenticated %}
+    <div class="alert alert-info alert-dismissible fade show" role="alert">
+        <i class="bi bi-info-circle"></i>
+        <strong>Welcome!</strong> Please <a href="{% url 'login' %}" class="alert-link">login</a> or <a href="{% url 'register' %}" class="alert-link">register as a customer</a> to add items to your cart and place orders.
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% elif user.type != 'CU' %}
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle"></i>
+        <strong>Note:</strong> Only customer accounts can place orders. You're currently logged in as a {{ user.get_type_display }}.
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    
     <div class="row">
         {% for dish in dishes %}
         <div class="col-md-4 col-sm-6 mb-4">
