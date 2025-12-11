@@ -1,5 +1,5 @@
 {% extends "./base.html" %}
-
+{% load filters %}
 {% block title %}Manage Menu - AI Restaurant{% endblock %}
 
 {% block content %}
@@ -41,7 +41,7 @@
                     {% endif %}
                 </td>
                 <td>{{ item.name }}</td>
-                <td>${{item.price|floatformat:2 }}</td>
+                <td>${{item.price|format_cents_as_money }}</td>
                 <td>{{ item.creator.username|default:"Unassigned" }}</td>
                 
                 <td>
