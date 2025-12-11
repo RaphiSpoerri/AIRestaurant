@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from AIRestaurant.data.users import User
 from AIRestaurant.data.manager import Manager
 from AIRestaurant.data.chef import Chef, Product
-from AIRestaurant.data.deliverer import Deliverer
+from AIRestaurant.data.deliverer import Deliverer, OrderedDish
 from AIRestaurant.data.customer import Customer
 from AIRestaurant.data.faq import FAQEntry
 from subprocess import run as shell_run
@@ -141,6 +141,27 @@ class Command(BaseCommand):
             )
             faq_entry.save()
             self.stdout.write(self.style.SUCCESS(f'✓ Created FAQ entry: {question}'))
+
+        # Create 3 completed orders for Ploni Almoni to demonstrate VIP path
+        ploni_user = User.objects.get(username='plonialmoni')
+        ploni_customer = Customer.objects.get(login=ploni_user)
+        ploni_customer.balance = 50000  # $500 in cents to cover demo orders
+        ploni_customer.save(update_fields=["balance"])
+
+        demo_dishes = Product.objects.filter(type='food')[:2]
+        for i in range(3):
+            order_items = []
+            for dish in demo_dishes:
+                order_items.append(OrderedDish(product=dish, quantity=1))
+
+            order = ploni_customer.order(order_items, order_type='food')
+            order.status = 'completed'
+            order.save(update_fields=["status"])
+            self.stdout.write(self.style.SUCCESS(f'✓ Created completed order {i+1} for Ploni Almoni'))
+
+        ploni_customer.refresh_from_db()
+        vip_status = '(VIP)' if ploni_customer.vip else '(not VIP yet)'
+        self.stdout.write(self.style.SUCCESS(f'Ploni Almoni status: {vip_status}'))
         self.stdout.write(self.style.SUCCESS('Database populated successfully!'))
 
         shell_run(['python', 'manage.py', 'migrate'])

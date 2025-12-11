@@ -20,6 +20,18 @@ class User(AbstractUser):
         ('CH', 'Chef'),
         ('MN', 'Manager')], default="CU")
 
+    @property
+    def is_vip(self):
+        """Return True if this user is a VIP customer."""
+        if self.type != 'CU':
+            return False
+        try:
+            from .customer import Customer
+            customer = Customer.objects.get(login=self)
+            return customer.vip
+        except Customer.DoesNotExist:
+            return False
+
 class Employee(Model):
     login       = OneToOneField(User, CASCADE)
     balance     = IntegerField(default=0)
