@@ -17,6 +17,10 @@ def _require_login(request):
     if not request.user.is_authenticated:
         messages.error(request, 'Please log in to submit feedback.')
         return redirect('login')
+    # Managers should not submit compliments or complaints.
+    if getattr(request.user, 'type', None) == 'MN':
+        messages.error(request, 'Managers cannot file complaints or compliments.')
+        return redirect('index')
     return None
 
 

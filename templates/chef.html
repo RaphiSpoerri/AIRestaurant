@@ -86,7 +86,7 @@
         </div>
       </div>
     {% else %}
-      {% if user.is_authenticated %}
+      {% if user.is_authenticated and user.type != 'MN' %}
         <div class="card mb-3">
           <div class="card-body">
             {% include "_compliment_form.html" %}
