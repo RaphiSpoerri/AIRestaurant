@@ -3,6 +3,43 @@
 
 {% block title %}FAQ - AI Restaurant{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Reuse chat styling for AI fallback on the FAQ page */
+    #faq-chat-messages {
+        height: 300px;
+        overflow-y: auto;
+        border: 1px solid #dee2e6;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+    .faq-message {
+        margin-bottom: 15px;
+    }
+    .faq-user-message {
+        text-align: right;
+    }
+    .faq-bot-message {
+        text-align: left;
+    }
+    .faq-message-bubble {
+        display: inline-block;
+        padding: 10px 15px;
+        border-radius: 15px;
+        max-width: 70%;
+    }
+    .faq-user-message .faq-message-bubble {
+        background-color: #007bff;
+        color: white;
+    }
+    .faq-bot-message .faq-message-bubble {
+        background-color: white;
+        border: 1px solid #dee2e6;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
     <div class="row">
@@ -21,38 +58,68 @@
                 <small class="text-muted">A match requires 90% of the search words to appear in a stored question.</small>
             </form>
 
-            <!-- FAQ Entries List -->
+            <!-- FAQ Entries List + AI integration -->
             {% if search_query %}
                 <h4>Search Results</h4>
-            {% else %}
-                <h4>All Questions</h4>
-            {% endif %}
-            
-            {% if all_entries %}
-                {% for entry in all_entries %}
+
+                {% if all_entries %}
+                    {% for entry in all_entries %}
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title">Q: {{ entry.question }}</h5>
+                                <p class="card-text">{{ entry.answer }}</p>
+                                <small class="text-muted">
+                                    Added {{ entry.created_at|date:"M d, Y H:i" }}
+                                    {% if entry.author %}
+                                        by {{ entry.author.username }}
+                                    {% else %}
+                                        by anonymous
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="alert alert-secondary">
+                        No stored FAQ entries matched this search.
+                    </div>
+
+                    <!-- AI response only shown when there are no search results -->
                     <div class="card mb-3">
+                        <div class="card-header">
+                            <h5>AI Answer</h5>
+                            <small class="text-muted">We also asked the AI about your question.</small>
+                        </div>
                         <div class="card-body">
-                            <h5 class="card-title">Q: {{ entry.question }}</h5>
-                            <p class="card-text">{{ entry.answer }}</p>
-                            <small class="text-muted">
-                                Added {{ entry.created_at|date:"M d, Y H:i" }}
-                                {% if entry.author %}
-                                    by {{ entry.author.username }}
-                                {% else %}
-                                    by anonymous
-                                {% endif %}
-                            </small>
+                            <div id="faq-chat-messages"></div>
                         </div>
                     </div>
-                {% endfor %}
+                {% endif %}
+
             {% else %}
-                <div class="alert alert-secondary">
-                    {% if search_query %}
-                        No entries match your search. Try different keywords or browse all questions below.
-                    {% else %}
+                <h4>All Questions</h4>
+                {% if all_entries %}
+                    {% for entry in all_entries %}
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title">Q: {{ entry.question }}</h5>
+                                <p class="card-text">{{ entry.answer }}</p>
+                                <small class="text-muted">
+                                    Added {{ entry.created_at|date:"M d, Y H:i" }}
+                                    {% if entry.author %}
+                                        by {{ entry.author.username }}
+                                    {% else %}
+                                        by anonymous
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="alert alert-secondary">
                         No FAQ entries yet. Be the first to add one!
-                    {% endif %}
-                </div>
+                    </div>
+                {% endif %}
             {% endif %}
         </div>
 
@@ -116,4 +183,81 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Show a single AI answer for the current FAQ search query (no extra input)
+document.addEventListener('DOMContentLoaded', function() {
+    const messagesDiv = document.getElementById('faq-chat-messages');
+    if (!messagesDiv) {
+        return; // no search running, nothing to do
+    }
+
+    const query = "{{ initial_query|escapejs }}".trim();
+    if (!query) {
+        return;
+    }
+
+    function addFaqMessage(text, sender, source) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'faq-message ' + (sender === 'user' ? 'faq-user-message' : 'faq-bot-message');
+
+        const bubble = document.createElement('div');
+        bubble.className = 'faq-message-bubble';
+        bubble.textContent = text;
+
+        if (sender === 'bot' && source) {
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-' + (source === 'local' ? 'success' : 'info') + ' ms-2';
+            badge.textContent = source === 'local' ? 'KB' : 'AI';
+            bubble.appendChild(badge);
+        }
+
+        messageDiv.appendChild(bubble);
+        messagesDiv.appendChild(messageDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // Show the searched question as the first message
+    addFaqMessage(query, 'user');
+
+    // Read CSRF token from cookie (Django default)
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+    const csrftoken = getCookie('csrftoken');
+
+    let n = 0;
+    const timerEl = document.createElement('p');
+    timerEl.textContent = '0s';
+    messagesDiv.appendChild(timerEl);
+    const timer = setInterval(() => {
+        n += 1;
+        timerEl.textContent = n + 's';
+    }, 1000);
+
+    fetch('{% url "ai_chat" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': csrftoken || '',
+        },
+        body: new URLSearchParams({ query: encodeURIComponent(query) }),
+    })
+    .then(response => response.json())
+    .then(data => {
+        clearInterval(timer);
+        messagesDiv.removeChild(timerEl);
+        addFaqMessage(data.answer, 'bot', data.source);
+    })
+    .catch(error => {
+        clearInterval(timer);
+        messagesDiv.removeChild(timerEl);
+        addFaqMessage('Sorry, I encountered an error: ' + error.message, 'bot');
+    });
+});
+</script>
 {% endblock %}

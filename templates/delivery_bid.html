@@ -1,4 +1,4 @@
-{% extends "./base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Place Delivery Bid - AI Restaurant{% endblock %}
 
@@ -11,25 +11,29 @@
             </div>
             <div class="card-body">
                 <div class="mb-3">
-                    <p><strong>Customer:</strong> {{ order.customer.username }}</p>
+                    <p><strong>Customer:</strong>
+                        {% if order.customer and order.customer.login %}
+                            {{ order.customer.login.username }}
+                        {% else %}
+                            <span class="text-muted">Unknown</span>
+                        {% endif %}
+                    </p>
                     <p><strong>Total:</strong> ${{ order.total_amount|floatformat:2 }}</p>
                     <p><strong>Address:</strong> {{ order.delivery_address|default:"N/A" }}</p>
                     <p><strong>Items:</strong></p>
                     <ul>
                         {% for item in order.items.all %}
-                        <li>{{ item.menu_item.name }} (x{{ item.quantity }})</li>
+                        <li>{{ item.product.name }} (x{{ item.quantity }})</li>
                         {% endfor %}
                     </ul>
                 </div>
                 <form method="POST" action="{% url 'delivery_bid' order.id %}">
                     {% csrf_token %}
                     <div class="mb-3">
-                        <label for="id_bid_amount" class="form-label">Bid Amount (Optional)</label>
-                        {{ form.bid_amount }}
-                        <small class="text-muted">Leave empty if no specific bid amount</small>
-                        {% if form.bid_amount.errors %}
-                        <div class="text-danger">{{ form.bid_amount.errors }}</div>
-                        {% endif %}
+                           <label for="id_bid_amount" class="form-label">Bid Amount (Optional)</label>
+                           <input type="number" step="0.01" min="0" name="bid_amount" id="id_bid_amount"
+                               class="form-control" value="{{ bid_amount|default:'' }}">
+                           <small class="text-muted">Leave empty if no specific bid amount</small>
                     </div>
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary">Place Bid</button>

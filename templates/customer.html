@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}Customer Profile - {{ target.name }}{% endblock %}
+{% block title %}Customer Profile - {{ target.username }}{% endblock %}
 
 {% block content %}
 <div class="row">
   <div class="col-md-8">
     <div class="card mb-3">
       <div class="card-body">
-        <h2>{{ target.name }} {% if target.vip %}<span class="badge bg-warning">VIP</span>{% endif %}</h2>
+        <h2>{{ target.username }} {% if target.vip %}<span class="badge bg-warning">VIP</span>{% endif %}</h2>
         <p><strong>User type:</strong> Customer</p>
         {% if private_visible %}
-          <p><strong>Balance:</strong> ${{ profile.balance }}</p>
+          <p><strong>Balance:</strong> ${{ profile.balance|floatformat:2 }}</p>
         {% endif %}
         {% if relevant_visible %}
           <p><strong>Warnings:</strong> {{ profile.warnings }}</p>
@@ -23,7 +23,11 @@
       <div class="card-body">
         {% for c in compliments %}
           <div class="mb-2">
-            <strong><a href="{% url 'profile' c.sender.id %}">{{ c.sender.name }}</a></strong>:
+            {% if c.sender %}
+              <strong><a href="{% url 'profile' c.sender.id %}">{{ c.sender.username }}</a></strong>:
+            {% else %}
+              <strong><span class="text-muted">Unknown sender</span></strong>:
+            {% endif %}
             {{ c.message.message }}
           </div>
         {% empty %}
@@ -38,13 +42,21 @@
         {% for cp in complaints %}
           {% if private_visible %}
             <div class="mb-2">
-              <strong>{{ cp.sender.name }}</strong>:
+              {% if cp.sender %}
+                <strong><a href="{% url 'profile' cp.sender.id %}">{{ cp.sender.username }}</a></strong>:
+              {% else %}
+                <strong><span class="text-muted">Unknown sender</span></strong>:
+              {% endif %}
               {{ cp.message.message }}
               <div><small class="text-muted">Status: {{ cp.get_status_display }}</small></div>
             </div>
           {% elif cp.status == 'v' and relevant_visible %}
             <div class="mb-2">
-              <strong>{{ cp.sender.name }}</strong>:
+              {% if cp.sender %}
+                <strong><a href="{% url 'profile' cp.sender.id %}">{{ cp.sender.username }}</a></strong>:
+              {% else %}
+                <strong><span class="text-muted">Unknown sender</span></strong>:
+              {% endif %}
               {{ cp.message.message }}
               <div><small class="text-muted">Status: {{ cp.get_status_display }}</small></div>
             </div>

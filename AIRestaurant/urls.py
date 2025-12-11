@@ -44,6 +44,7 @@ urlpatterns = [
     
     # Manager pages
     path('manage_menu/', views.manage_menu, name='manage_menu'),
+    path('manage_users/', views.manage_users, name='manage_users'),
     path('review_complaint/<int:complaint_id>/', views.review_complaint, name='review_complaint'),
     path('assign_order/<int:order_id>/', views.assign_order, name='assign_order'),
     path('approve_user/<int:user_id>/', views.approve_user, name='approve_user'),

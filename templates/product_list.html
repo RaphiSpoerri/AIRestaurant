@@ -81,6 +81,13 @@
                 {% endif %}
                 <div class="card-body">
                     <h5 class="card-title">{{ dish.name }}</h5>
+                    {% if dish.creator and dish.creator.login %}
+                    <p class="mb-1">
+                        <small class="text-muted">By
+                            <a href="{% url 'profile' dish.creator.login.id %}">{{ dish.creator.login.username }}</a>
+                        </small>
+                    </p>
+                    {% endif %}
                     <p class="card-text">{{ dish.description }}</p>
                     
                     <p class="h5 text-primary">{{ dish.price|format_cents_as_money }}</p>

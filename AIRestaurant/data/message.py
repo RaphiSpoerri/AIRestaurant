@@ -29,4 +29,5 @@ class Complaint(Model):
     sender  = ForeignKey(User, SET_NULL, related_name="ComplaintSender", null=True)
     to      = ForeignKey(User, CASCADE, related_name="ComplaintTo", null=True)
     message = ForeignKey(Message, CASCADE)
-    status  = CharField(max_length=1, choices=STATUS, default='pending')
+    # use short code 'p' to match STATUS choices
+    status  = CharField(max_length=1, choices=STATUS, default='p')

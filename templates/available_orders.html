@@ -1,4 +1,4 @@
-{% extends "./base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Available Orders - AI Restaurant{% endblock %}
 
@@ -23,10 +23,16 @@
             {% for order in orders %}
             <tr>
                 <td>#{{ order.id }}</td>
-                <td>{{ order.customer.username }}</td>
+                <td>
+                    {% if order.customer and order.customer.login %}
+                        <a href="{% url 'profile' order.customer.login.id %}">{{ order.customer.login.username }}</a>
+                    {% else %}
+                        <span class="text-muted">Unknown</span>
+                    {% endif %}
+                </td>
                 <td>
                     {% for item in order.items.all %}
-                    {{ item.menu_item.name }} (x{{ item.quantity }})<br>
+                    {{ item.product.name }} (x{{ item.quantity }})<br>
                     {% endfor %}
                 </td>
                 <td>${{ order.total_amount|floatformat:2 }}</td>

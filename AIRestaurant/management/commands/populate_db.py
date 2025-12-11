@@ -39,7 +39,14 @@ class Command(BaseCommand):
         ]
 
         # Clear existing data
-        for model in [Manager, Chef, Deliverer, Customer, User, Product]:
+        for model in [
+            Manager,
+            Chef,
+            Deliverer,
+            Customer,
+            User,
+            Product,
+        ]:
             model.objects.all().delete()
 
         raphael_login = User.objects.create_user(

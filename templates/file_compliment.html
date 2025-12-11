@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Send a Compliment - AI Restaurant{% endblock %}
+
+{% block content %}
+<h2>Send a Compliment</h2>
+
+{% if target %}
+	<p class="text-muted">You are sending a compliment to <strong>{{ target.username }}</strong>.</p>
+	{% include "_compliment_form.html" %}
+{% else %}
+	<div class="alert alert-info">
+		No target selected. Please go back to your <a href="{% url 'order_history' %}">order history</a>
+		or a user's profile to send a compliment.
+	</div>
+{% endif %}
+{% endblock %}
+

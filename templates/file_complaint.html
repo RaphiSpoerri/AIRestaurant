@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}File a Complaint - AI Restaurant{% endblock %}
+
+{% block content %}
+<h2>File a Complaint</h2>
+
+{% if target %}
+	<p class="text-muted">You are filing a complaint about <strong>{{ target.username }}</strong>.</p>
+	{% include "_complaint_form.html" %}
+{% else %}
+	<div class="alert alert-info">
+		No target selected. Please go back to your <a href="{% url 'order_history' %}">order history</a>
+		or a user's profile to file a complaint.
+	</div>
+{% endif %}
+{% endblock %}
+

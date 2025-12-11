@@ -2,7 +2,7 @@
 
 from django.db.models import *
 
-from .users import Employee
+from .users import Employee, User
 from .chef import Product
 
 
@@ -31,3 +31,20 @@ class OrderedDish(Model):
 
 class Deliverer(Employee):
     pass
+
+
+class Bid(Model):
+        """A deliverer's bid (or abstention) for delivering a specific order.
+
+        - Each Bid links a deliverer (via their User record) to an Order.
+        - `price_cents` stores the bid amount in cents; it may be null to
+            indicate the deliverer is abstaining from bidding.
+        """
+
+        order = ForeignKey(Order, CASCADE, related_name="bids")
+        deliverer = ForeignKey(User, CASCADE, related_name="delivery_bids")
+        price_cents = IntegerField(null=True, blank=True)
+        created_at = DateTimeField(auto_now_add=True)
+
+        class Meta:
+                unique_together = ("order", "deliverer")

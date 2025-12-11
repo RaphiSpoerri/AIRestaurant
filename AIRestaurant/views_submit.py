@@ -50,7 +50,8 @@ def submit_complaint(request):
     t = Thread.objects.create(title=thread_title[:100], creation_date=timezone.now())
 
     msg = Message.objects.create(thread=t, message=description, who=sender, when=timezone.now())
-    Complaint.objects.create(sender=sender, to=target, message=msg)
+    # Ensure new complaints start in 'pending' state using code 'p'
+    Complaint.objects.create(sender=sender, to=target, message=msg, status='p')
     messages.success(request, 'Complaint submitted.')
     return redirect('profile', user_id=target.id)
 
@@ -86,6 +87,18 @@ def submit_compliment(request):
     msg = Message.objects.create(thread=t, message=description, who=sender, when=timezone.now())
     Compliment.objects.create(sender=sender, to=target, message=msg)
     messages.success(request, 'Compliment submitted.')
+
+    # Apply side effects for employees receiving compliments
+    employee = None
+    if target.type == 'CH':
+        from .data.chef import Chef
+        employee = Chef.objects.filter(login=target).first()
+    elif target.type == 'DL':
+        from .data.deliverer import Deliverer
+        employee = Deliverer.objects.filter(login=target).first()
+    if employee:
+        employee.add_compliment_sideaffects()
+
     return redirect('profile', user_id=target.id)
 
 

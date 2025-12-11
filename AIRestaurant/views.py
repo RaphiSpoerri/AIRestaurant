@@ -21,6 +21,7 @@ from .models import (
     OrderedDish,
     Plea,
     FAQEntry,
+    Bid,
 )
 from django.db.models import Avg, Count
 from django.utils import timezone
@@ -359,10 +360,52 @@ def suspended_notice(request):
 
 
 def review_complaint(request, complaint_id):
+    """Manager action: mark a complaint as valid or invalid.
+
+    This view is intended to be called via POST from the manager dashboard
+    with a `decision` field set to either "accept" or "reject".
+    """
+    viewer = request.user
+    viewer_type = getattr(viewer, 'type', None)
+    is_manager = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
+
+    if not is_manager:
+        messages.error(request, 'Only managers can review complaints.')
+        return redirect('index')
+
+    complaint = get_object_or_404(Complaint, pk=complaint_id)
+
     if request.method == 'POST':
-        # handle review action
-        return redirect('my_complaints')
-    return render(request, 'review_complaint.html', {'complaint_id': complaint_id})
+        decision = request.POST.get('decision')
+        if decision == 'accept':
+            complaint.status = 'v'
+            complaint.save(update_fields=['status'])
+            messages.success(request, 'Complaint has been marked as valid.')
+            # Apply side effects for employees (chef/deliverer) when a
+            # complaint is confirmed as valid. This may demote or fire
+            # them once their score reaches the configured thresholds.
+            target_user = complaint.to
+            employee = None
+            if getattr(target_user, 'type', None) == 'CH':
+                employee = Chef.objects.filter(login=target_user).first()
+            elif getattr(target_user, 'type', None) == 'DL':
+                employee = Deliverer.objects.filter(login=target_user).first()
+            if employee is not None:
+                # Run side effects to update status/salary based on the
+                # new valid complaint. This will demote or fire employees
+                # once their score crosses the configured thresholds.
+                employee.add_complaint_sideaffects()
+        elif decision == 'reject':
+            complaint.status = 'i'
+            complaint.save(update_fields=['status'])
+            messages.success(request, 'Complaint has been marked as invalid.')
+        else:
+            messages.error(request, 'Unknown decision for complaint review.')
+
+        return redirect('profile', user_id=viewer.id)
+
+    # For non-POST access, just send the manager back to their profile.
+    return redirect('profile', user_id=viewer.id)
 
 
 @require_POST
@@ -418,6 +461,59 @@ def plea_forgive(request, plea_id):
     return redirect('profile', user_id=viewer.id)
 
 
+def file_complaint(request):
+    """File a complaint using the shared _complaint_form partial.
+
+    - From order history: /file_complaint/?order_id=<id>
+    - From profile pages: the partial is embedded directly there.
+    """
+    if not request.user.is_authenticated:
+        messages.error(request, 'Please log in to file a complaint.')
+        return redirect('login')
+
+    target = None
+    order_id = request.GET.get('order_id')
+    if order_id:
+        try:
+            order = Order.objects.get(pk=int(order_id))
+        except (Order.DoesNotExist, ValueError, TypeError):
+            order = None
+        if order:
+            # Simple policy: complaints about orders go to the manager
+            mgr = Manager.objects.first()
+            target = getattr(mgr, 'login', None)
+
+    return render(request, 'file_complaint.html', {
+        'target': target,
+    })
+
+
+def file_compliment(request):
+    """Send a compliment using the shared _compliment_form partial.
+
+    - From order history: /file_compliment/?order_id=<id>
+    - From profile pages: the partial is embedded directly there.
+    """
+    if not request.user.is_authenticated:
+        messages.error(request, 'Please log in to send a compliment.')
+        return redirect('login')
+
+    target = None
+    order_id = request.GET.get('order_id')
+    if order_id:
+        try:
+            order = Order.objects.get(pk=int(order_id))
+        except (Order.DoesNotExist, ValueError, TypeError):
+            order = None
+        if order:
+            mgr = Manager.objects.first()
+            target = getattr(mgr, 'login', None)
+        
+    return render(request, 'file_compliment.html', {
+        'target': target,
+    })
+
+
 def assign_order(request, order_id):
     if request.method == 'POST':
         # assign order logic
@@ -464,7 +560,22 @@ def login(request):
                 if status == 'PN':
                     messages.error(request, 'Your account is pending manager approval. Please wait for approval.')
                 elif status == 'SU':
-                    messages.error(request, 'Your account has been suspended.')
+                    # Distinguish between suspended customers and fired staff.
+                    fired = False
+                    user_type = getattr(user, 'type', None)
+                    if user_type in ('CH', 'DL'):
+                        employee = None
+                        if user_type == 'CH':
+                            employee = Chef.objects.filter(login=user).first()
+                        elif user_type == 'DL':
+                            employee = Deliverer.objects.filter(login=user).first()
+                        if employee is not None and getattr(employee, 'status', None) == 'FD':
+                            fired = True
+
+                    if fired:
+                        messages.error(request, 'Your account has been terminated. You have been fired.')
+                    else:
+                        messages.error(request, 'Your account has been suspended.')
                 else:
                     messages.error(request, 'Your account is not active.')
                 return render(request, 'login.html')
@@ -603,6 +714,128 @@ def chef(request):
         return redirect('profile', user_id=request.user.id)
     return render(request, 'chef.html')
 
+
+def available_orders(request):
+    """List all pending orders that are available for delivery.
+
+    Currently we treat any order with status="pending" as unassigned
+    and therefore available. Only logged-in deliverers can view this
+    page.
+    """
+    if not request.user.is_authenticated:
+        messages.error(request, 'Please log in to view available orders.')
+        return redirect('login')
+
+    if getattr(request.user, 'type', None) != 'DL':
+        messages.error(request, 'Only deliverers can view available orders.')
+        return redirect('index')
+
+    orders_qs = (
+        Order.objects
+        .filter(status='pending')
+        .select_related('customer__login')
+        .prefetch_related('items__product')
+        .order_by('-date')
+    )
+
+    orders = []
+    for order in orders_qs:
+        total_cents = 0
+        for item in order.items.all():
+            try:
+                total_cents += item.total_cost()
+            except Exception:
+                if getattr(item, 'product', None) is not None and item.quantity:
+                    total_cents += item.product.price * item.quantity
+        order.total_amount = total_cents / 100.0
+        orders.append(order)
+
+    return render(request, 'available_orders.html', {'orders': orders})
+
+
+def delivery_bid(request, order_id):
+    """Allow a deliverer to place an optional bid on an order.
+
+    For now we simply validate the input and show a success message;
+    orders remain in the pool of available orders.
+    """
+    if not request.user.is_authenticated:
+        messages.error(request, 'Please log in to place a delivery bid.')
+        return redirect('login')
+
+    if getattr(request.user, 'type', None) != 'DL':
+        messages.error(request, 'Only deliverers can place delivery bids.')
+        return redirect('index')
+
+    order = get_object_or_404(
+        Order.objects.select_related('customer__login').prefetch_related('items__product', 'bids__deliverer'),
+        pk=order_id,
+    )
+
+    # Compute a display total in dollars from line items
+    total_cents = 0
+    for item in order.items.all():
+        try:
+            total_cents += item.total_cost()
+        except Exception:
+            if getattr(item, 'product', None) is not None and item.quantity:
+                total_cents += item.product.price * item.quantity
+    order.total_amount = total_cents / 100.0
+
+    # Existing bid (if any) from this deliverer for this order
+    existing_bid = Bid.objects.filter(order=order, deliverer=request.user).first()
+
+    if request.method == 'POST':
+        bid_raw = (request.POST.get('bid_amount') or '').strip()
+        bid_amount = None
+
+        if bid_raw:
+            try:
+                bid_amount = float(bid_raw)
+                if bid_amount < 0:
+                    raise ValueError()
+            except ValueError:
+                messages.error(request, 'Please enter a valid non-negative bid amount.')
+                return render(request, 'delivery_bid.html', {
+                    'order': order,
+                    'bid_amount': bid_raw,
+                })
+
+        # Convert dollars to cents; None means abstaining
+        price_cents = None
+        if bid_amount is not None:
+            price_cents = int(round(bid_amount * 100))
+
+        bid_obj, _created = Bid.objects.get_or_create(
+            order=order,
+            deliverer=request.user,
+            defaults={'price_cents': price_cents},
+        )
+        if not _created:
+            bid_obj.price_cents = price_cents
+            bid_obj.save(update_fields=['price_cents'])
+
+        if bid_amount is not None:
+            messages.success(
+                request,
+                f'Your bid of ${bid_amount:.2f} for order #{order.id} has been recorded.',
+            )
+        else:
+            messages.success(
+                request,
+                f'Your abstention for order #{order.id} has been recorded.',
+            )
+
+        return redirect('available_orders')
+
+    # Pre-fill the form with any existing bid (in dollars)
+    initial_bid = ''
+    if existing_bid and existing_bid.price_cents is not None:
+        initial_bid = f"{existing_bid.price_cents / 100:.2f}"
+
+    return render(request, 'delivery_bid.html', {'order': order, 'bid_amount': initial_bid})
+
+
 def deliverer(request):
     """Redirect to current user's deliverer profile if authenticated."""
     if request.user.is_authenticated:
@@ -697,6 +930,12 @@ def profile_view(request, user_id):
         'complaints': [],
         'avg_dish_rating': None,
         'can_view_private': False,
+        # employee-related metrics (for chefs/deliverers)
+        'employee': None,
+        'employee_score': None,
+        'employee_salary_dollars': None,
+        'employee_bonus_dollars': None,
+        'employee_demotion_dollars': None,
     }
 
     # load profile model instance if present
@@ -709,21 +948,53 @@ def profile_view(request, user_id):
     elif target.type == 'MN':
         context['profile'] = Manager.objects.filter(login=target).first()
 
-    # compliments and complaints (show latest first)
-    context['compliments'] = list(Compliment.objects.filter(to=target).select_related('sender', 'message').order_by('-id')[:50])
-    context['complaints'] = list(Complaint.objects.filter(to=target).select_related('sender', 'message').order_by('-id')[:50])
+    # compliments and complaints (show all for full history, latest first)
+    context['compliments'] = list(
+        Compliment.objects
+        .filter(to=target)
+        .select_related('sender', 'message')
+        .order_by('-id')
+    )
+    context['complaints'] = list(
+        Complaint.objects
+        .filter(to=target)
+        .select_related('sender', 'message')
+        .order_by('-id')
+    )
 
-    # compute average product rating for chefs (food items only)
-    if target.type == 'CH':
-        try:
-            avg = ProductRating.objects.filter(
-                product__type='food',
-                product__creator__login=target,
-            ).aggregate(avg=Avg('rating'))['avg']
-            if avg is not None:
-                context['avg_dish_rating'] = round(avg, 2)
-        except Exception:
-            context['avg_dish_rating'] = None
+    # compute average product rating for chefs (food items only) and
+    # employee metrics (salary, promotion status, net score) for
+    # chefs and deliverers.
+    if target.type in ('CH', 'DL'):
+        # employee profile instance (Chef/Deliverer subclass Employee)
+        employee = context['profile']
+
+        # Chef-specific average dish rating
+        if target.type == 'CH':
+            try:
+                avg = ProductRating.objects.filter(
+                    product__type='food',
+                    product__creator__login=target,
+                ).aggregate(avg=Avg('rating'))['avg']
+                if avg is not None:
+                    context['avg_dish_rating'] = round(avg, 2)
+            except Exception:
+                context['avg_dish_rating'] = None
+
+        # Employee metrics if we have a backing Employee record
+        if employee is not None:
+            try:
+                score_val = employee.score()
+            except Exception:
+                score_val = None
+
+            context.update({
+                'employee': employee,
+                'employee_score': score_val,
+                'employee_salary_dollars': (employee.salary or 0) / 100.0,
+                'employee_bonus_dollars': (employee.bonus or 0) / 100.0,
+                'employee_demotion_dollars': (employee.demotion or 0) / 100.0,
+            })
 
     # Compute permission grouping (three categories): public / relevant / private
     viewer_type = getattr(viewer, 'type', None)
@@ -737,10 +1008,27 @@ def profile_view(request, user_id):
     # private_visible: private fields shown to owner and managers
     context['private_visible'] = is_owner or is_manager_viewer
 
-    # For managers, include pending registration requests and pleas
+    # For managers, include pending registration requests, pleas, complaints,
+    # and any customer orders that are still pending.
     if target.type == 'MN':
         context['pending_users'] = list(DataUser.objects.filter(status='PN').order_by('date_joined'))
         context['pleas'] = list(Plea.objects.select_related('sender').order_by('-created_at'))
+        # Show all complaints that are in a pending state. Some older
+        # rows may have string 'pending', newer ones use the short code 'p'.
+        context['pending_complaints'] = list(
+            Complaint.objects.filter(status__in=['p', 'pending'])
+            .select_related('sender', 'to', 'message')
+            .order_by('-id')
+        )
+
+        # Pending orders: all orders with status='pending'. At the moment
+        # there is no explicit deliverer assignment on the Order model, so
+        # "unassigned" and "pending" are equivalent.
+        context['pending_orders'] = list(
+            Order.objects.filter(status='pending')
+            .select_related('customer')
+            .order_by('-date')
+        )
 
     # pick template by target type
     tpl_map = {'CU': 'customer.html', 'CH': 'chef.html', 'DL': 'deliverer.html', 'MN': 'manager.html'}
@@ -775,6 +1063,83 @@ def discussions(request):
     return render(request, 'discussions.html', {
         'threads': threads,
         'query': q,
+    })
+
+
+def manage_users(request):
+    """Manager-only view listing all users and their key details.
+
+    Shows account status, role, and any associated profile/employee metrics
+    to help managers make informed decisions.
+    """
+    viewer = request.user
+    viewer_type = getattr(viewer, 'type', None)
+    is_manager = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
+
+    if not is_manager:
+        messages.error(request, 'Only managers can view the user management page.')
+        return redirect('index')
+
+    users = list(
+        DataUser.objects.all()
+        .order_by('id')
+    )
+
+    # Preload related profile/employee objects
+    from .data.customer import Customer as CustomerProfile
+    from .data.chef import Chef as ChefProfile
+    from .data.deliverer import Deliverer as DelivererProfile
+    from .data.manager import Manager as ManagerProfile
+
+    customer_map = {c.login_id: c for c in CustomerProfile.objects.all()}
+    chef_map = {c.login_id: c for c in ChefProfile.objects.all()}
+    deliverer_map = {d.login_id: d for d in DelivererProfile.objects.all()}
+    manager_map = {m.login_id: m for m in ManagerProfile.objects.all()}
+
+    # Attach lightweight profile info per user for the template
+    user_rows = []
+    for u in users:
+        profile = None
+        employee = None
+        extra = {}
+
+        if u.type == 'CU':
+            profile = customer_map.get(u.id)
+            if profile is not None:
+                extra = {
+                    'warnings': profile.warnings,
+                    'balance_cents': profile.balance,
+                    'vip': profile.vip,
+                }
+        elif u.type == 'CH':
+            profile = chef_map.get(u.id)
+            employee = profile
+        elif u.type == 'DL':
+            profile = deliverer_map.get(u.id)
+            employee = profile
+        elif u.type == 'MN':
+            profile = manager_map.get(u.id)
+
+        if employee is not None:
+            try:
+                score_val = employee.score()
+            except Exception:
+                score_val = None
+            extra.update({
+                'employee_status': employee.get_status_display(),
+                'employee_salary_dollars': (employee.salary or 0) / 100.0,
+                'employee_score': score_val,
+            })
+
+        user_rows.append({
+            'user': u,
+            'profile': profile,
+            'extra': extra,
+        })
+
+    return render(request, 'manage_users.html', {
+        'viewer': viewer,
+        'user_rows': user_rows,
     })
 
 
@@ -979,4 +1344,6 @@ def faq(request):
         'search_query': search_query,
         'all_entries': all_entries,
         'duplicate_warning': duplicate_warning,
+        # Always pass the current query so AI can answer alongside results
+        'initial_query': search_query,
     })
