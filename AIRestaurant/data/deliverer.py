@@ -12,6 +12,14 @@ class Order(Model):
     customer = ForeignKey("Customer", CASCADE, null=True, blank=True)
     date = DateTimeField(auto_now_add=True)
     status = CharField(max_length=20, default="pending")
+    # Null => deliverer pending; set when manager assigns
+    assigned_deliverer = ForeignKey(
+        User,
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_orders",
+    )
     # Classify orders so each one is either food or merch
     order_type = CharField(
         max_length=5,

@@ -85,6 +85,7 @@
                 <th>Customer</th>
                 <th>Type</th>
                 <th>Placed At</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -100,6 +101,11 @@
                 </td>
                 <td>{{ order.get_order_type_display|default:order.order_type }}</td>
                 <td><small>{{ order.date|localtime }}</small></td>
+                <td>
+                  <a href="{% url 'assign_order' order.id %}" class="btn btn-sm btn-outline-primary">
+                    Review Bids / Assign
+                  </a>
+                </td>
               </tr>
               {% endfor %}
             </tbody>

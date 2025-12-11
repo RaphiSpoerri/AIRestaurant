@@ -1,4 +1,4 @@
-{% extends "./base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Assign Order - AI Restaurant{% endblock %}
 
@@ -11,12 +11,18 @@
             </div>
             <div class="card-body">
                 <div class="mb-3">
-                    <p><strong>Customer:</strong> {{ order.customer.username }}</p>
+                    <p><strong>Customer:</strong>
+                        {% if order.customer and order.customer.login %}
+                            {{ order.customer.login.username }}
+                        {% else %}
+                            <span class="text-muted">Unknown</span>
+                        {% endif %}
+                    </p>
                     <p><strong>Total:</strong> ${{ order.total_amount|floatformat:2 }}</p>
                     <p><strong>Items:</strong></p>
                     <ul>
                         {% for item in order.items.all %}
-                        <li>{{ item.menu_item.name }} (x{{ item.quantity }})</li>
+                        <li>{{ item.product.name }} (x{{ item.quantity }})</li>
                         {% endfor %}
                     </ul>
                     <p><strong>Delivery Address:</strong> {{ order.delivery_address|default:"N/A" }}</p>
@@ -36,8 +42,8 @@
                         <tbody>
                             {% for bid in bids %}
                             <tr>
-                                <td>{{ bid.delivery_person.username }}</td>
-                                <td>{% if bid.bid_amount %}${{ bid.bid_amount|floatformat:2 }}{% else %}No bid{% endif %}</td>
+                                <td>{{ bid.deliverer.username }}</td>
+                                <td>{% if bid.bid_amount is not None %}${{ bid.bid_amount|floatformat:2 }}{% else %}No bid{% endif %}</td>
                                 <td>{{ bid.created_at|date:"Y-m-d H:i" }}</td>
                             </tr>
                             {% endfor %}
@@ -52,9 +58,9 @@
                         <select class="form-select" id="delivery_person_id" name="delivery_person_id" required>
                             <option value="">Select delivery person...</option>
                             {% for bid in bids %}
-                            <option value="{{ bid.delivery_person.id }}">
-                                {{ bid.delivery_person.username }} 
-                                {% if bid.bid_amount %}(Bid: ${{ bid.bid_amount|floatformat:2 }}){% endif %}
+                            <option value="{{ bid.deliverer.id }}">
+                                {{ bid.deliverer.username }} 
+                                {% if bid.bid_amount is not None %}(Bid: ${{ bid.bid_amount|floatformat:2 }}){% endif %}
                             </option>
                             {% endfor %}
                         </select>

@@ -515,10 +515,52 @@ def file_compliment(request):
 
 
 def assign_order(request, order_id):
+    """Manager view to review bids for an order and assign it.
+
+    For now this view focuses on displaying all bids. Assignment
+    itself can be wired up later.
+    """
+    viewer = request.user
+    viewer_type = getattr(viewer, 'type', None)
+    is_manager = getattr(viewer, 'is_staff', False) or getattr(viewer, 'is_superuser', False) or (viewer_type == 'MN')
+
+    if not is_manager:
+        messages.error(request, 'Only managers can assign orders.')
+        return redirect('index')
+
+    order = get_object_or_404(
+        Order.objects.select_related('customer__login').prefetch_related('items__product', 'bids__deliverer'),
+        pk=order_id,
+    )
+
+    # Compute total in dollars for display
+    total_cents = 0
+    for item in order.items.all():
+        try:
+            total_cents += item.total_cost()
+        except Exception:
+            if getattr(item, 'product', None) is not None and item.quantity:
+                total_cents += item.product.price * item.quantity
+    order.total_amount = total_cents / 100.0
+
+    # All bids for this order, with a convenient dollars field
+    bids = list(order.bids.all().select_related('deliverer'))
+    for b in bids:
+        b.bid_amount = None
+        if b.price_cents is not None:
+            b.bid_amount = b.price_cents / 100.0
+
     if request.method == 'POST':
-        # assign order logic
-        return redirect('order_history')
-    return render(request, 'assign_order.html', {'order_id': order_id})
+        # Placeholder: in the future, we can persist the chosen deliverer
+        delivery_person_id = request.POST.get('delivery_person_id')
+        if not delivery_person_id:
+            messages.error(request, 'Please choose a delivery person to assign this order.')
+            return render(request, 'assign_order.html', {'order': order, 'bids': bids})
+
+        messages.success(request, 'Order assignment choice recorded (implementation pending).')
+        return redirect('manager')
+
+    return render(request, 'assign_order.html', {'order': order, 'bids': bids})
 
 
 def update_order_status(request, order_id):
