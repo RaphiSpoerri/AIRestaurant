@@ -84,7 +84,7 @@
                     <p class="h5 text-primary">{{ dish.price|format_cents_as_money }}</p>
                     
                     <!-- Dish Rating -->
-                    <div class="rating-stars">
+                    <div class="rating-stars" id="rating-display-{{ dish.id }}">
                         {% for i in "12345"|make_list %}
                             {% if forloop.counter <= dish.average_rating %}
                                 <i class="bi bi-star-fill"></i>
@@ -92,14 +92,14 @@
                                 <i class="bi bi-star"></i>
                             {% endif %}
                         {% endfor %}
-                        <small class="text-muted">({{ dish.rating_count }} ratings)</small>
+                        <small class="text-muted">(<span class="rating-count">{{ dish.rating_count }}</span> rating{{ dish.rating_count|pluralize }})</small>
                     </div>
                     
                     <!-- Quantity Controls (only for logged-in customers) -->
                     {% if user.is_authenticated and user.type == 'CU' %}
                     <div class="quantity-controls">
                         <button class="quantity-btn minus" data-dish-id="{{ dish.id }}">-</button>
-                        <input type="number" class="form-control quantity-input" id="quantity-{{ dish.id }}" value="0" min="0" readonly>
+                        <input type="number" class="form-control quantity-input" id="quantity-{{ dish.id }}" value="{{ dish.initial_qty|default:0 }}" min="0" readonly>
                         <button class="quantity-btn plus" data-dish-id="{{ dish.id }}">+</button>
                     </div>
                     {% endif %}
@@ -195,9 +195,23 @@ $(document).ready(function() {
                 setTimeout(() => {
                     $alert.alert('close');
                 }, 3000);
-                
-                // Update the rating display
-                location.reload(); // Simple refresh for now
+
+                // Update the average rating display for this dish
+                const avg = response.average_rating || 0;
+                const count = response.rating_count || 0;
+                const rounded = Math.round(avg);
+                const $display = $('#rating-display-' + dishId);
+                if ($display.length) {
+                    let starsHtml = '';
+                    for (let i = 1; i <= 5; i++) {
+                        if (i <= rounded) {
+                            starsHtml += '<i class="bi bi-star-fill"></i>';
+                        } else {
+                            starsHtml += '<i class="bi bi-star"></i>';
+                        }
+                    }
+                    $display.html(starsHtml + ' <small class="text-muted">(<span class="rating-count">' + count + '</span> ratings)</small>');
+                }
             },
             error: function(xhr) {
                 // Show error message
@@ -219,8 +233,8 @@ $(document).ready(function() {
         });
     });
     
-    // Update cart and show/hide checkout button
-    function updateCart() {
+    // Helper to build cart from current quantity inputs
+    function buildCartFromInputs() {
         const cart = {};
         $('.quantity-input').each(function() {
             const dishId = $(this).attr('id').replace('quantity-', '');
@@ -229,11 +243,12 @@ $(document).ready(function() {
                 cart[dishId] = quantity;
             }
         });
-        
-        // Save cart to session/local storage
-        localStorage.setItem('cart', JSON.stringify(cart));
-        
-        // Show/hide checkout button
+        return cart;
+    }
+
+    // Update cart UI (show/hide checkout button) based on current inputs
+    function updateCart() {
+        const cart = buildCartFromInputs();
         if (Object.keys(cart).length > 0) {
             $('#checkoutBtn').removeClass('d-none');
         } else {
@@ -241,20 +256,10 @@ $(document).ready(function() {
         }
     }
     
-    // Initialize cart from storage
-    const savedCart = localStorage.getItem('cart');
-    if (savedCart) {
-        const cart = JSON.parse(savedCart);
-        for (const [dishId, quantity] of Object.entries(cart)) {
-            $(`#quantity-${dishId}`).val(quantity);
-        }
-        updateCart();
-    }
-    
     // Handle checkout button click
     $('#checkoutBtn').click(function() {
         const $btn = $(this);
-        const cart = JSON.parse(localStorage.getItem('cart') || '{}');
+        const cart = buildCartFromInputs();
         
         // Disable button and show loading state
         $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...');
@@ -294,6 +299,10 @@ $(document).ready(function() {
             }
         });
     });
+
+    // On initial load, make sure the checkout button visibility matches
+    // whatever quantities are already present (from the server-side cart).
+    updateCart();
 });
 </script>
 {% endblock %}

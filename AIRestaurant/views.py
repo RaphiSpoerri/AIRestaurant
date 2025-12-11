@@ -34,12 +34,21 @@ def menu(request):
         getattr(request.user, 'type', None) == 'CU'
     )
 
+    # Look at any in-progress cart stored in the session so the
+    # quantities shown on the menu reflect what is already in the cart.
+    session_cart = request.session.get('cart', {}) or {}
+
     # Attach convenient attributes used by the template
     dishes = []
     for d in dishes_qs:
         d.average_rating = (d.avg_rating or 0)
         d.rating_count = d.rating_count
         d.can_rate = is_customer
+        # Initial quantity for this dish based on the cart
+        try:
+            d.initial_qty = int(session_cart.get(str(d.id), 0))
+        except (TypeError, ValueError):
+            d.initial_qty = 0
         dishes.append(d)
 
     return render(request, 'menu.html', {'dishes': dishes})
@@ -66,24 +75,32 @@ def rate_dish(request, dish_id):
     if rating_val < 1 or rating_val > 5:
         return JsonResponse({'error': 'Rating must be between 1 and 5.'}, status=400)
 
-    dish = get_object_or_404(Dish, pk=dish_id)
+    try:
+        dish = get_object_or_404(Dish, pk=dish_id)
 
-    # Ensure we have an Employee record linked to this user so
-    # DishRating(unique_together=(dish, who)) can store per-user ratings.
-    rater, _ = Employee.objects.get_or_create(login=request.user)
+        # Ensure we have an Employee record linked to this user so
+        # DishRating(unique_together=(dish, who)) can store per-user ratings.
+        rater, _ = Employee.objects.get_or_create(login=request.user)
 
-    dr, _ = DishRating.objects.get_or_create(dish=dish, who=rater)
-    dr.rating = rating_val
-    dr.save()
+        # Use a safer update pattern to avoid issues if duplicate
+        # DishRating rows ever exist.
+        dr = DishRating.objects.filter(dish=dish, who=rater).first()
+        if dr is None:
+            dr = DishRating(dish=dish, who=rater)
+        dr.rating = rating_val
+        dr.save()
 
-    # Recompute aggregate rating info to return to the client if needed
-    agg = DishRating.objects.filter(dish=dish).aggregate(avg=Avg('rating'), count=Count('id'))
-    return JsonResponse({
-        'status': 'ok',
-        'dish_id': dish.id,
-        'average_rating': agg['avg'] or 0,
-        'rating_count': agg['count'] or 0,
-    })
+        # Recompute aggregate rating info to return to the client if needed
+        agg = DishRating.objects.filter(dish=dish).aggregate(avg=Avg('rating'), count=Count('id'))
+        return JsonResponse({
+            'status': 'ok',
+            'dish_id': dish.id,
+            'average_rating': agg['avg'] or 0,
+            'rating_count': agg['count'] or 0,
+        })
+    except Exception as e:
+        # Surface the underlying error so the frontend can display it
+        return JsonResponse({'error': f'Internal error while saving rating: {e}'}, status=500)
 
 def deposit(request):
     # Ensure user is authenticated and is a customer
