@@ -1073,7 +1073,7 @@ def ai_chat(request):
     # API-style endpoint used by FAQ page; POST only.
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)
-    if "testing":
+    if False:
         question = unquote(request.POST.get('query'))
         result = shell(
             [f'llama-run', f'/Users/raphispoerri/College/csc322/tinyllama-1.1b-chat-v1.0.Q4_0.gguf'],
