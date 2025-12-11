@@ -1261,6 +1261,45 @@ def discussions(request):
     })
 
 
+def manage_menu(request):
+    """Manager/Chef view listing all menu items (food products).
+
+    Shows all existing `Product` rows tagged as `type='food'` so that
+    managers and chefs can review the current menu.
+    """
+    viewer = request.user
+    viewer_type = getattr(viewer, 'type', None)
+
+    # Allow managers and chefs to access this page.
+    is_manager = (
+        getattr(viewer, 'is_staff', False)
+        or getattr(viewer, 'is_superuser', False)
+        or (viewer_type == 'MN')
+    )
+    is_chef = (viewer_type == 'CH')
+
+    if not (is_manager or is_chef):
+        messages.error(request, 'Only managers and chefs can manage the menu.')
+        return redirect('index')
+
+    # For now we focus on listing all existing FOOD products.
+    menu_items = list(
+        Product.objects
+        .filter(type='food')
+        .select_related('creator__login')
+        .order_by('id')
+    )
+
+    # Provide all chefs for the template's dropdowns.
+    chefs = list(Chef.objects.select_related('login').order_by('login__username'))
+
+    return render(request, 'manage_menu.html', {
+        'menu_items': menu_items,
+        'chefs': chefs,
+        'viewer': viewer,
+    })
+
+
 def manage_users(request):
     """Manager-only view listing all users and their key details.
 

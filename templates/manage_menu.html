@@ -1,4 +1,6 @@
-{% extends "./base.html" %}
+{% extends "base.html" %}
+{% load static %}
+{% load filters %}
 
 {% block title %}Manage Menu - AI Restaurant{% endblock %}
 
@@ -18,11 +20,8 @@
             <tr>
                 <th>Image</th>
                 <th>Name</th>
-                <th>Description</th>
                 <th>Price</th>
-                <th>Category</th>
                 <th>Chef</th>
-                <th>Status</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -30,9 +29,9 @@
             {% for item in menu_items %}
             <tr>
                 <td>
-                    {% if item.image %}
-                    <img src="{{ item.image.url }}" 
-                         alt="{{ item.name }}" style="width: 60px; height: 60px; object-fit: cover;">
+                    {% if item.img %}
+                    <img src="{% static 'admin/img/' %}{{ item.img }}" 
+                        alt="{{ item.name }}" style="width: 60px; height: 60px; object-fit: cover;">
                     {% else %}
                     <div class="bg-light d-flex align-items-center justify-content-center" 
                          style="width: 60px; height: 60px;">
@@ -41,8 +40,14 @@
                     {% endif %}
                 </td>
                 <td>{{ item.name }}</td>
-                <td>${{item.price|floatformat:2 }}</td>
-                <td>{{ item.creator.username|default:"Unassigned" }}</td>
+                <td>{{ item.price|format_cents_as_money }}</td>
+                <td>
+                    {% if item.creator and item.creator.login %}
+                        {{ item.creator.login.username }}
+                    {% else %}
+                        Unassigned
+                    {% endif %}
+                </td>
                 
                 <td>
                     <button type="button" class="btn btn-sm btn-primary" 
@@ -90,7 +95,12 @@
                     </div>
                     <div class="mb-3">
                         <label for="chef" class="form-label">Chef</label>
-                        {{ form.chef }}
+                        <select class="form-select" id="chef" name="chef">
+                            <option value="">Unassigned</option>
+                            {% for chef in chefs %}
+                            <option value="{{ chef.id }}">{{ chef.login.username }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="mb-3">
                         <label for="image" class="form-label">Image</label>
@@ -146,7 +156,7 @@
                         <select class="form-select" id="edit_chef{{ item.id }}" name="chef">
                             <option value="">Unassigned</option>
                             {% for chef in chefs %}
-                            <option value="{{ chef.id }}" {% if item.chef_id == chef.id %}selected{% endif %}>{{ chef.username }}</option>
+                            <option value="{{ chef.id }}" {% if item.creator_id == chef.id %}selected{% endif %}>{{ chef.login.username }}</option>
                             {% endfor %}
                         </select>
                     </div>
