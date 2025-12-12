@@ -1090,25 +1090,39 @@ def customer(request, profile: str = None):
     return profile_view(request, user.id)
 
 def ai_chat(request):
-    
+
     # API-style endpoint used by FAQ page; POST only.
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)
-    if socket.gethostname().endswith('.local'):
-        question = unquote(request.POST.get('query'))
-        result = shell(
-            [f'llama-run', f'/Users/raphispoerri/College/csc322/tinyllama-1.1b-chat-v1.0.Q4_0.gguf'],
-            capture_output=True,
-            input=question,
-            encoding='utf-8')
+
+    question = unquote(request.POST.get('query'))
+
+    # Compute model path dynamically instead of hard-coding absolute paths.
+    # This preserves the existing locations:
+    #  - Local dev:   <parent-of-project>/tinyllama-....gguf
+    #  - PythonAnywhere:  ~/AI/tinyllama-....gguf
+    from pathlib import Path
+    import os
+
+    hostname = socket.gethostname()
+    base_dir = Path(__file__).resolve().parent.parent
+
+    if hostname.endswith('.local'):
+        # Local machine: model lives one directory above the project root
+        default_model = base_dir.parent / 'tinyllama-1.1b-chat-v1.0.Q4_0.gguf'
     else:
-        AI_PATH = "/home/SapphireBrick613/AI"
-        question = unquote(request.POST.get('query'))
-        result = shell(
-            [f'{AI_PATH}/llama-run', f'{AI_PATH}/tinyllama-1.1b-chat-v1.0.Q4_0.gguf'],
-            capture_output=True,
-            input=question,
-            encoding='utf-8')
+        # Server (e.g. PythonAnywhere): model lives under ~/AI
+        default_model = Path.home() / 'AI' / 'tinyllama-1.1b-chat-v1.0.Q4_0.gguf'
+
+    model_path = Path(os.environ.get('AI_MODEL_PATH', default_model))
+
+    cmd = ['llama-run', str(model_path)]
+
+    result = shell(
+        cmd,
+        capture_output=True,
+        input=question,
+        encoding='utf-8')
     response = result.stdout.replace("\x1b[0m", "") if result.returncode == 0 else "<AI failed>"
 
     return JsonResponse({

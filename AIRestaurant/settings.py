@@ -125,12 +125,15 @@ STATICFILES_DIRS = [ BASE_DIR / "static" ]
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# default static files settings for PythonAnywhere.
-# see https://help.pythonanywhere.com/pages/DjangoStaticFiles for more info
-MEDIA_ROOT = '/home/SapphireBrick613/AIRestaurant/AIRestaurant/media'
+# default static files settings.
+# Use paths relative to BASE_DIR so this works both locally and on hosts
+# like PythonAnywhere without hard-coding absolute paths.
+MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = '/media/'
-# Prefer PythonAnywhere path if present, otherwise fall back to local staticfiles folder
-STATIC_ROOT = Path('/home/SapphireBrick613/AIRestaurant/AIRestaurant/static') if Path('/home/SapphireBrick613/AIRestaurant/AIRestaurant/static').exists() else BASE_DIR / 'staticfiles'
+
+# If a deployment-specific static root is needed (e.g. on PythonAnywhere),
+# it can be overridden via environment variables or a separate settings file.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'SapphireBrick613.pythonanywhere.com']
 
